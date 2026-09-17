@@ -10,7 +10,18 @@ DASHBOARD_URL = os.getenv("DASHBOARD_URL", "")
 st.title("🌏 Consular Case Intelligence")
 st.caption("Turning CCMS case emails into structured, analysable intelligence — demo on Databricks.")
 
-tab_chat, tab_case, tab_dash = st.tabs(["💬 Ask", "🗂️ Case view", "📊 Dashboard"])
+tab_cases, tab_chat, tab_dash = st.tabs(["🗂️ Cases", "💬 Ask", "📊 Dashboard"])
+
+
+def _current_officer():
+    try:
+        h = st.context.headers
+        return h.get("X-Forwarded-Email") or h.get("X-Forwarded-Preferred-Username") or "officer"
+    except Exception:
+        return "officer"
+
+
+STATUS_BADGE = {"Closed": "🟢 Closed", "Pending": "🟠 Pending"}
 
 with tab_chat:
     import agent
@@ -39,30 +50,91 @@ with tab_chat:
             st.markdown(ans)
         st.session_state.history.append(("assistant", ans, route_name))
 
-with tab_case:
+with tab_cases:
     import tools
-    refs = tools.list_case_refs()
-    ref = st.selectbox("Select a case", refs)
-    if ref:
+
+    PAGE_SIZE = 20
+    st.session_state.setdefault("page", 0)
+    st.session_state.setdefault("sel_case", None)
+
+    def _open(ref):
+        st.session_state.sel_case = ref
+
+    def _back():
+        st.session_state.sel_case = None
+
+    # ---------- RECORD VIEW ----------
+    if st.session_state.sel_case:
+        ref = st.session_state.sel_case
         c = tools.get_case(ref)
-        if c:
-            a, b = st.columns(2)
-            with a:
-                st.subheader("Structured (CCMS)")
+        st.button("← Back to case list", on_click=_back)
+        if not c:
+            st.warning("Case not found.")
+        else:
+            st.header(f"{ref}")
+            st.markdown(f"**{c.get('Case_Type')}** · {c.get('L1_Country')} · "
+                        f"{STATUS_BADGE.get(c.get('Case_Status'), c.get('Case_Status'))}")
+            left, right = st.columns([3, 2])
+            with left:
+                st.subheader("Case details")
                 st.write({k: c.get(k) for k in
                           ["Case_Ref", "Case_Type", "Case_Status", "Case_Handler",
                            "Assigned_HCG", "Title_Name", "Resolution_Days"]})
-                st.subheader("Layer 1 tags")
-                st.write({k: c.get(k) for k in
-                          ["L1_Country", "L1_Agencies", "L1_Situational_Flags"]})
-            with b:
-                st.subheader("Layer 2 analysis")
-                for k in ["L2_Summary_Pathway", "L2_Assistance_Req_vs_Provided",
-                          "L2_Complications_Delays", "L2_External_Resources", "L2_Lessons_Learnt"]:
-                    st.markdown(f"**{k.replace('L2_', '').replace('_', ' ')}**")
-                    st.write(c.get(k))
-            st.subheader("Case description")
-            st.write(c.get("Case_Description"))
+                st.markdown("**Layer 1 tags**")
+                st.write({k: c.get(k) for k in ["L1_Country", "L1_Agencies", "L1_Situational_Flags"]})
+                st.markdown("**Description**")
+                st.write(c.get("Case_Description"))
+                with st.expander("Layer 2 analysis", expanded=True):
+                    for k in ["L2_Summary_Pathway", "L2_Assistance_Req_vs_Provided",
+                              "L2_Complications_Delays", "L2_External_Resources", "L2_Lessons_Learnt"]:
+                        st.markdown(f"**{k.replace('L2_', '').replace('_', ' ')}**")
+                        st.write(c.get(k))
+                with st.expander("✅ Recommended next steps (SOP)", expanded=True):
+                    st.markdown(tools.recommended_steps(c.get("Case_Type")))
+            with right:
+                st.subheader("🗒️ Notes")
+                with st.form(f"note_form_{ref}", clear_on_submit=True):
+                    txt = st.text_area("Record a step taken / update", height=100,
+                                       placeholder="e.g. Contacted next-of-kin; confirmed welfare with mission.")
+                    if st.form_submit_button("Add note") and txt.strip():
+                        tools.add_note(ref, _current_officer(), txt.strip())
+                        st.success("Note added.")
+                        st.rerun()
+                for n in tools.get_notes(ref):
+                    st.markdown(f"**{n['author']}** · _{n['created_at']}_")
+                    st.info(n["note"])
+                if not tools.get_notes(ref):
+                    st.caption("No notes yet.")
+
+    # ---------- LIST VIEW ----------
+    else:
+        total = tools.count_cases()
+        pages = max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE)
+        page = min(st.session_state.page, pages - 1)
+
+        top = st.columns([4, 1, 1, 1])
+        top[0].markdown(f"**{total} cases** · newest first · page {page + 1} of {pages}")
+        if top[1].button("⏮ First", disabled=(page == 0)):
+            st.session_state.page = 0; st.rerun()
+        if top[2].button("◀ Prev", disabled=(page == 0)):
+            st.session_state.page = page - 1; st.rerun()
+        if top[3].button("Next ▶", disabled=(page >= pages - 1)):
+            st.session_state.page = page + 1; st.rerun()
+
+        cols, rows = tools.list_cases_page(page, PAGE_SIZE)
+        hdr = st.columns([2.2, 2.2, 1.6, 1.6, 1.2, 1.4, 1])
+        for col, label in zip(hdr, ["Case Ref", "Type", "Country", "Mission", "Status", "Created", ""]):
+            col.markdown(f"**{label}**")
+        for r in rows:
+            row = dict(zip(cols, r))
+            cc = st.columns([2.2, 2.2, 1.6, 1.6, 1.2, 1.4, 1])
+            cc[0].write(row["Case_Ref"])
+            cc[1].write(row["Case_Type"])
+            cc[2].write(row["Country"])
+            cc[3].write(row["Mission"])
+            cc[4].write(STATUS_BADGE.get(row["Status"], row["Status"]))
+            cc[5].write(row["Created_On"])
+            cc[6].button("View", key=f"view_{row['Case_Ref']}", on_click=_open, args=(row["Case_Ref"],))
 
 with tab_dash:
     import pandas as pd

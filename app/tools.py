@@ -84,3 +84,46 @@ def get_case(case_ref: str) -> dict:
 def list_case_refs(limit: int = 200):
     _, rows = _query(f"SELECT Case_Ref FROM {FQ}.gold_case_intelligence ORDER BY Case_Ref LIMIT {limit}")
     return [r[0] for r in rows]
+
+
+def count_cases() -> int:
+    _, rows = _query(f"SELECT count(*) FROM {FQ}.gold_case_intelligence")
+    return int(rows[0][0]) if rows else 0
+
+
+def list_cases_page(page: int, page_size: int = 20):
+    """Return (columns, rows) for one page, newest first."""
+    offset = page * page_size
+    return _query(
+        "SELECT Case_Ref, Case_Type, L1_Country AS Country, Assigned_HCG AS Mission, "
+        "Case_Status AS Status, Created_On "
+        f"FROM {FQ}.gold_case_intelligence "
+        f"ORDER BY to_date(Created_On) DESC, Case_Ref DESC LIMIT {page_size} OFFSET {offset}")
+
+
+def recommended_steps(case_type: str) -> str:
+    """Fetch the SOP steps for this case type (matched by normalised title)."""
+    safe = (case_type or "").replace("'", "''")
+    _, rows = _query(
+        f"SELECT chunk FROM {FQ}.gold_sop_chunks "
+        f"WHERE regexp_replace(lower(sop_title), '[^a-z]', '') = "
+        f"regexp_replace(lower('{safe}'), '[^a-z]', '') LIMIT 1")
+    return rows[0][0] if rows else "No matching SOP found for this case type."
+
+
+def get_notes(case_ref: str):
+    safe = case_ref.replace("'", "''")
+    cols, rows = _query(
+        f"SELECT author, note, cast(created_at AS STRING) AS created_at FROM {FQ}.case_notes "
+        f"WHERE Case_Ref = '{safe}' ORDER BY created_at DESC")
+    return [dict(zip(cols, r)) for r in rows]
+
+
+def add_note(case_ref: str, author: str, note: str):
+    import uuid
+    nid = uuid.uuid4().hex
+    cr = case_ref.replace("'", "''")
+    au = (author or "officer").replace("'", "''")
+    nt = note.replace("'", "''")
+    _query(f"INSERT INTO {FQ}.case_notes VALUES "
+           f"('{nid}', '{cr}', '{au}', '{nt}', current_timestamp())")
