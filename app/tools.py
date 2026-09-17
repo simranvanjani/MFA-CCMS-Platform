@@ -12,8 +12,8 @@ from databricks.sdk import WorkspaceClient
 CATALOG = os.getenv("CCMS_CATALOG", "kauvey_poc")
 SCHEMA = os.getenv("CCMS_SCHEMA", "mfa_ccms")
 FQ = f"{CATALOG}.{SCHEMA}"
-WAREHOUSE = os.getenv("DATABRICKS_WAREHOUSE_ID", "3ca7ddd9d10dbbac")
-GENIE_SPACE = os.getenv("GENIE_SPACE_ID", "01f1b2809936166da1a732dc78d8162f")
+WAREHOUSE = os.getenv("DATABRICKS_WAREHOUSE_ID", "<warehouse-id>")
+GENIE_SPACE = os.getenv("GENIE_SPACE_ID", "<genie-space-id>")
 IDX_EMAIL = os.getenv("IDX_EMAIL", f"{FQ}.case_email_index")
 IDX_SOP = os.getenv("IDX_SOP", f"{FQ}.sop_index")
 

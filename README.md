@@ -11,9 +11,9 @@ per the *Consular Case Intelligence* PRD (MFA Singapore).
 
 | Item | Value |
 |------|-------|
-| Profile / workspace | `DEFAULT` (`adb-7405605297651217.17`) |
+| Profile / workspace | `DEFAULT` (`<workspace-host>`) |
 | Catalog / schema | `kauvey_poc.mfa_ccms` |
-| Warehouse | `3ca7ddd9d10dbbac` |
+| Warehouse | `<warehouse-id>` |
 | Models | `databricks-claude-sonnet-4-5`, `databricks-gte-large-en` |
 
 ## Deployed objects
@@ -25,9 +25,9 @@ per the *Consular Case Intelligence* PRD (MFA Singapore).
 | Accuracy view | `kauvey_poc.mfa_ccms.tag_accuracy` (case-type 1.00 / mission 0.94) |
 | Vector Search endpoint | `mfa_ccms_vs` |
 | Indexes | `kauvey_poc.mfa_ccms.case_email_index`, `…​.sop_index` |
-| Genie space | `01f1b2809936166da1a732dc78d8162f` |
-| AI/BI dashboard | `01f1b2804de6171a80599744ddde9a56` |
-| App | `mfa-ccms-intel` — https://mfa-ccms-intel-7405605297651217.17.azure.databricksapps.com |
+| Genie space | `<genie-space-id>` |
+| AI/BI dashboard | `<dashboard-id>` |
+| App | `mfa-ccms-intel` — https://<app-url> |
 
 ## Pipeline
 

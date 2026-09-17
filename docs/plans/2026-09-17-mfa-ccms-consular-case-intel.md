@@ -6,7 +6,7 @@
 
 **Architecture:** Medallion pipeline in `kauvey_poc.mfa_ccms` — synthetic PDFs land in a UC Volume (Bronze), `ai_parse_document` extracts clean text, `ai_query` populates the provided CCMS schema (Silver) and adds Layer 1 tags + Layer 2 analytical fields (Gold). Gold feeds UC column masks, two Vector Search indexes, a Genie space, an AI/BI dashboard, and a Databricks App.
 
-**Tech Stack:** Databricks CLI (DEFAULT profile), SQL warehouse `3ca7ddd9d10dbbac`, AI Functions (`ai_parse_document`, `ai_query`), `databricks-claude-sonnet-4-5`, `databricks-gte-large-en`, Vector Search, Genie, AI/BI (Lakeview) dashboards, Databricks Apps (Python), local Python for PDF generation (`fpdf2`).
+**Tech Stack:** Databricks CLI (DEFAULT profile), SQL warehouse `<warehouse-id>`, AI Functions (`ai_parse_document`, `ai_query`), `databricks-claude-sonnet-4-5`, `databricks-gte-large-en`, Vector Search, Genie, AI/BI (Lakeview) dashboards, Databricks Apps (Python), local Python for PDF generation (`fpdf2`).
 
 **Spec:** `docs/specs/2026-09-17-mfa-ccms-consular-case-intel-design.md`
 
@@ -14,7 +14,7 @@
 
 - Catalog/schema: `kauvey_poc.mfa_ccms` — names literal, never normalized.
 - CLI profile: always pass `--profile DEFAULT`. Never auto-select another profile.
-- SQL warehouse for all SQL / AI Functions: `3ca7ddd9d10dbbac`.
+- SQL warehouse for all SQL / AI Functions: `<warehouse-id>`.
 - LLM for all extraction/enrichment/agent: `databricks-claude-sonnet-4-5`. Embeddings: `databricks-gte-large-en`. No external (non-Databricks) model calls.
 - Provided CCMS schema (Silver) reproduced **exactly** — all columns `string` except `Do_Not_Modify_Modified_On` (timestamp). Column names verbatim from the spec §4.1.
 - Evidence-only tagging: apply a Layer 1 tag only when the email narrative explicitly supports it; otherwise null / empty array.
@@ -60,7 +60,7 @@
 - Create: `pipeline/config.py`, `pipeline/dbsql.py`
 
 **Interfaces:**
-- Produces: `config.CAT="kauvey_poc"`, `config.SCHEMA="mfa_ccms"`, `config.FQ="kauvey_poc.mfa_ccms"`, `config.WAREHOUSE="3ca7ddd9d10dbbac"`, `config.LLM="databricks-claude-sonnet-4-5"`, `config.EMB="databricks-gte-large-en"`, `config.PROFILE="DEFAULT"`.
+- Produces: `config.CAT="kauvey_poc"`, `config.SCHEMA="mfa_ccms"`, `config.FQ="kauvey_poc.mfa_ccms"`, `config.WAREHOUSE="<warehouse-id>"`, `config.LLM="databricks-claude-sonnet-4-5"`, `config.EMB="databricks-gte-large-en"`, `config.PROFILE="DEFAULT"`.
 - Produces: `dbsql.run(sql: str) -> list[dict]` — executes SQL on the warehouse via the SDK `StatementExecution` API and returns rows.
 
 - [ ] **Step 1: Verify auth** — `databricks current-user me --profile DEFAULT` → expect `userName": "simran.vanjani@databricks.com"`.
@@ -231,7 +231,7 @@ WHERE Case_Type IS NOT NULL AND L1_Case_Type IS NOT NULL;
 - Produces: a Genie space over the gold table with curated instructions + example SQL. (Created via UI or `databricks-genie-agents` skill; record the space id.)
 
 - [ ] **Step 1: Write instructions** — describe the table, the L1/L2 columns, synonyms (mission=unit=handler, flag values), and 6–8 example NL→SQL pairs (e.g. "arrest & detention cases in Thailand where ICA was involved in the last 12 months", "handling volume by unit", "resolution time by case type").
-- [ ] **Step 2: Create the Genie space** targeting `gold_case_intelligence` (+ `tag_accuracy`) on warehouse `3ca7ddd9d10dbbac`; paste instructions.
+- [ ] **Step 2: Create the Genie space** targeting `gold_case_intelligence` (+ `tag_accuracy`) on warehouse `<warehouse-id>`; paste instructions.
 - [ ] **Step 3: Verify** — ask the ICA/Thailand question and the handling-volume question; both return correct SQL + results. Record space id in `genie/instructions.md`.
 - [ ] **Step 4: Commit.**
 
@@ -248,7 +248,7 @@ WHERE Case_Type IS NOT NULL AND L1_Case_Type IS NOT NULL;
 > Ground against `fe-databricks-tools:databricks-lakeview-dashboard` skill.
 
 - [ ] **Step 1: Define 5 datasets (SQL)** — (1) case-type × country counts, (2) count by `L1_Mission`/`Case_Handler`, (3) situational-flag counts by month (explode `L1_Situational_Flags`), (4) avg `Resolution_Days` by `L1_Case_Type`, (5) agency co-involvement pairs (explode `L1_Agencies`).
-- [ ] **Step 2: Build dashboard** — heatmap, bar, line, bar, matrix/heatmap respectively; warehouse `3ca7ddd9d10dbbac`.
+- [ ] **Step 2: Build dashboard** — heatmap, bar, line, bar, matrix/heatmap respectively; warehouse `<warehouse-id>`.
 - [ ] **Step 3: Publish; verify** each widget renders with data.
 - [ ] **Step 4: Commit.**
 

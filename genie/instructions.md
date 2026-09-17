@@ -1,8 +1,8 @@
 # Genie Space — Consular Case Intelligence
 
 **Target table:** `kauvey_poc.mfa_ccms.gold_case_intelligence` (+ `kauvey_poc.mfa_ccms.tag_accuracy`)
-**Warehouse:** `3ca7ddd9d10dbbac`
-**Space id:** 01f1b2809936166da1a732dc78d8162f
+**Warehouse:** `<warehouse-id>`
+**Space id:** <genie-space-id>
 
 ## Description for Genie
 
