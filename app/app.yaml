@@ -1,0 +1,18 @@
+command: ["streamlit", "run", "app.py"]
+env:
+  - name: CCMS_CATALOG
+    value: "kauvey_poc"
+  - name: CCMS_SCHEMA
+    value: "mfa_ccms"
+  - name: DATABRICKS_WAREHOUSE_ID
+    value: "3ca7ddd9d10dbbac"
+  - name: GENIE_SPACE_ID
+    value: "01f1b2809936166da1a732dc78d8162f"
+  - name: IDX_EMAIL
+    value: "kauvey_poc.mfa_ccms.case_email_index"
+  - name: IDX_SOP
+    value: "kauvey_poc.mfa_ccms.sop_index"
+  - name: CCMS_LLM
+    value: "databricks-claude-sonnet-4-5"
+  - name: DASHBOARD_URL
+    value: "https://adb-7405605297651217.17.azuredatabricks.net/dashboardsv3/01f1b2804de6171a80599744ddde9a56/published"
