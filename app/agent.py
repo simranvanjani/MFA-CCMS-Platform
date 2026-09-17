@@ -42,8 +42,8 @@ def route(question: str) -> dict:
         return {"route": "structured"}
 
 
-def answer(question: str) -> tuple[str, str]:
-    """Return (route, answer_markdown)."""
+def answer(question: str, w=None) -> tuple[str, str]:
+    """Return (route, answer_markdown). `w` is the user (OBO) client for SQL + Genie."""
     r = route(question)
     route_name = r.get("route", "structured")
 
@@ -55,12 +55,12 @@ def answer(question: str) -> tuple[str, str]:
         source = "SOP / procedures library"
     elif route_name == "case_lookup":
         ref = r.get("case_ref")
-        case = tools.get_case(ref) if ref else {}
+        case = tools.get_case(ref, w) if ref else {}
         evidence = json.dumps(case, default=str, indent=1) if case else "Case not found."
         source = f"Case record {ref}"
     else:
         route_name = "structured"
-        evidence = tools.genie_query(question)
+        evidence = tools.genie_query(question, w)
         source = "Genie over the structured case table"
 
     compose = [

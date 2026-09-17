@@ -1,7 +1,13 @@
-"""Case Intelligence app — FastAPI backend serving the case console UI + JSON API."""
+"""Case Intelligence app — FastAPI backend serving the case console UI + JSON API.
+
+Uses on-behalf-of-user (OBO) auth for SQL + Genie so Unity Catalog masks/filters apply to
+the real viewer; Vector Search + the LLM run on the app service principal.
+"""
 import json
 import os
 
+from databricks.sdk import WorkspaceClient
+from databricks.sdk.core import Config
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
@@ -12,6 +18,20 @@ import tools
 app = FastAPI(title="Consular Case Console")
 HERE = os.path.dirname(os.path.abspath(__file__))
 PAGE_SIZE = 20
+CFG = Config()
+
+
+def user_client(request: Request):
+    """A WorkspaceClient scoped to the logged-in user (OBO), or None locally."""
+    token = request.headers.get("x-forwarded-access-token")
+    if not token:
+        return None
+    return WorkspaceClient(host=CFG.host, token=token)
+
+
+def user_email(request: Request):
+    return (request.headers.get("X-Forwarded-Email")
+            or request.headers.get("X-Forwarded-Preferred-Username") or "officer")
 
 
 @app.get("/")
@@ -21,14 +41,14 @@ def index():
 
 @app.get("/api/me")
 def me(request: Request):
-    return {"email": (request.headers.get("X-Forwarded-Email")
-                      or request.headers.get("X-Forwarded-Preferred-Username") or "officer")}
+    return {"email": user_email(request)}
 
 
 @app.get("/api/cases")
-def cases(page: int = 0):
-    cols, rows = tools.list_cases_page(page, PAGE_SIZE)
-    return {"total": tools.count_cases(), "page": page, "page_size": PAGE_SIZE,
+def cases(request: Request, page: int = 0):
+    w = user_client(request)
+    cols, rows = tools.list_cases_page(page, PAGE_SIZE, w)
+    return {"total": tools.count_cases(w), "page": page, "page_size": PAGE_SIZE,
             "rows": [dict(zip(cols, r)) for r in rows]}
 
 
@@ -41,14 +61,15 @@ def _arr(v):
 
 
 @app.get("/api/case")
-def case(ref: str):
-    c = tools.get_case(ref)
+def case(request: Request, ref: str):
+    w = user_client(request)
+    c = tools.get_case(ref, w)
     if not c:
         return JSONResponse({"error": "not found"}, status_code=404)
     c["L1_Agencies"] = _arr(c.get("L1_Agencies"))
     c["L1_Situational_Flags"] = _arr(c.get("L1_Situational_Flags"))
-    return {"case": c, "steps": tools.recommended_steps_list(c.get("Case_Type")),
-            "notes": tools.get_notes(ref)}
+    return {"case": c, "steps": tools.recommended_steps_list(c.get("Case_Type"), w),
+            "notes": tools.get_notes(ref, w)}
 
 
 class NoteIn(BaseModel):
@@ -58,10 +79,9 @@ class NoteIn(BaseModel):
 
 @app.post("/api/note")
 def add_note(n: NoteIn, request: Request):
-    author = (request.headers.get("X-Forwarded-Email")
-              or request.headers.get("X-Forwarded-Preferred-Username") or "officer")
-    tools.add_note(n.ref, author, n.note)
-    return {"ok": True, "notes": tools.get_notes(n.ref)}
+    w = user_client(request)
+    tools.add_note(n.ref, user_email(request), n.note, w)
+    return {"ok": True, "notes": tools.get_notes(n.ref, w)}
 
 
 class AskIn(BaseModel):
@@ -69,14 +89,14 @@ class AskIn(BaseModel):
 
 
 @app.post("/api/ask")
-def ask(a: AskIn):
+def ask(a: AskIn, request: Request):
     try:
-        route, answer = agent.answer(a.question)
+        route, answer = agent.answer(a.question, user_client(request))
     except Exception as e:
         return {"route": "error", "answer": f"Error: {e}"}
     return {"route": route, "answer": answer}
 
 
 @app.get("/api/dashboard")
-def dashboard():
-    return tools.dashboard_data()
+def dashboard(request: Request):
+    return tools.dashboard_data(user_client(request))

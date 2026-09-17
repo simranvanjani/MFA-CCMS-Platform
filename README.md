@@ -57,8 +57,12 @@ One-time: `python -m genie.create_space`, `python -m pipeline.07_dashboard`, app
 databricks workspace import-dir app /Workspace/Users/<you>/mfa-ccms-intel-src --overwrite --profile DEFAULT
 databricks apps deploy mfa-ccms-intel --source-code-path /Workspace/Users/<you>/mfa-ccms-intel-src --profile DEFAULT
 ```
-The app service principal is granted: UC USE/SELECT/EXECUTE on the schema, objects and mask
-function; `CAN_USE` on the warehouse and VS endpoint; `CAN_RUN` on the Genie space.
+**Auth (hybrid OBO):** the app uses on-behalf-of-user auth (`x-forwarded-access-token`,
+scopes `sql` + `dashboards.genie`) for SQL reads/notes and Genie — so Unity Catalog column
+masks/row filters evaluate against the *real viewer*. Vector Search and the Claude LLM run on
+the app service principal (shared inference, no PII). The SP is granted `CAN_USE` on the
+warehouse and VS endpoint and `CAN_QUERY` on the FM endpoint (default-open); the earlier
+per-table SELECT grants to the SP are no longer required but are harmless.
 
 ## Notes / deviations
 
