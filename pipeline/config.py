@@ -5,7 +5,7 @@ CAT = "kauvey_poc"
 SCHEMA = "mfa_ccms"
 FQ = f"{CAT}.{SCHEMA}"
 
-WAREHOUSE = "3ca7ddd9d10dbbac"
+WAREHOUSE = "<warehouse-id>"
 LLM = "databricks-claude-sonnet-4-5"
 EMB = "databricks-gte-large-en"
 

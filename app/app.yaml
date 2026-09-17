@@ -5,9 +5,9 @@ env:
   - name: CCMS_SCHEMA
     value: "mfa_ccms"
   - name: DATABRICKS_WAREHOUSE_ID
-    value: "3ca7ddd9d10dbbac"
+    value: "<warehouse-id>"
   - name: GENIE_SPACE_ID
-    value: "01f1b2809936166da1a732dc78d8162f"
+    value: "<genie-space-id>"
   - name: IDX_EMAIL
     value: "kauvey_poc.mfa_ccms.case_email_index"
   - name: IDX_SOP
