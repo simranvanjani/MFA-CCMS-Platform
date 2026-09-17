@@ -111,6 +111,35 @@ def recommended_steps(case_type: str) -> str:
     return rows[0][0] if rows else "No matching SOP found for this case type."
 
 
+def recommended_steps_list(case_type: str):
+    """Parse the SOP chunk into an ordered list of step strings."""
+    import re
+    text = recommended_steps(case_type)
+    steps = [re.sub(r"^\s*\d+\.\s*", "", ln).strip()
+             for ln in text.splitlines() if re.match(r"^\s*\d+\.\s+", ln)]
+    return steps
+
+
+def dashboard_data():
+    """KPIs + chart series for the dashboard view."""
+    G = f"{FQ}.gold_case_intelligence"
+    def q(sql):
+        c, r = _query(sql)
+        return [dict(zip(c, row)) for row in r]
+    kpi = q(f"SELECT count(*) total, sum(CASE WHEN Case_Status='Closed' THEN 1 ELSE 0 END) closed, "
+            f"round(avg(Resolution_Days),1) avg_days FROM {G}")[0]
+    return {
+        "kpi": kpi,
+        "by_type": q(f"SELECT Case_Type k, count(*) v FROM {G} GROUP BY Case_Type ORDER BY v DESC"),
+        "by_country": q(f"SELECT L1_Country k, count(*) v FROM {G} GROUP BY L1_Country ORDER BY v DESC"),
+        "by_mission": q(f"SELECT Assigned_HCG k, count(*) v FROM {G} GROUP BY Assigned_HCG ORDER BY v DESC"),
+        "resolution": q(f"SELECT Case_Type k, round(avg(Resolution_Days),1) v FROM {G} "
+                        f"WHERE Resolution_Days IS NOT NULL GROUP BY Case_Type ORDER BY v DESC"),
+        "flags": q(f"SELECT flag k, count(*) v FROM {G} LATERAL VIEW explode(L1_Situational_Flags) t AS flag "
+                   f"GROUP BY flag ORDER BY v DESC"),
+    }
+
+
 def get_notes(case_ref: str):
     safe = case_ref.replace("'", "''")
     cols, rows = _query(

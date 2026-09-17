@@ -49,7 +49,7 @@ One-time: `python -m genie.create_space`, `python -m pipeline.07_dashboard`, app
 
 - `pipeline/` — `config.py`, `dbsql.py`, `00_schema.py` … `07_dashboard.py`, `run_all.py`
 - `genie/instructions.md`, `genie/create_space.py`
-- `app/` — `app.py` (Streamlit), `agent.py` (router), `tools.py`, `app.yaml`, `requirements.txt`
+- `app/` — `app.py` (FastAPI API), `index.html` (case-console UI), `agent.py` (router), `tools.py`, `app.yaml`, `requirements.txt`
 
 ## App deploy
 

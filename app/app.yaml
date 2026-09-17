@@ -1,4 +1,4 @@
-command: ["streamlit", "run", "app.py"]
+command: ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
 env:
   - name: CCMS_CATALOG
     value: "kauvey_poc"
@@ -14,5 +14,3 @@ env:
     value: "kauvey_poc.mfa_ccms.sop_index"
   - name: CCMS_LLM
     value: "databricks-claude-sonnet-4-5"
-  - name: DASHBOARD_URL
-    value: "https://adb-7405605297651217.17.azuredatabricks.net/dashboardsv3/01f1b2804de6171a80599744ddde9a56/published"
