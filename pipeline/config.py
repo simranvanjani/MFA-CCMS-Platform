@@ -1,7 +1,7 @@
 """Shared configuration for the MFA CCMS Consular Case Intelligence demo."""
 
 PROFILE = "DEFAULT"
-CAT = "simranv"
+CAT = "kauvey_poc"
 SCHEMA = "mfa_ccms"
 FQ = f"{CAT}.{SCHEMA}"
 

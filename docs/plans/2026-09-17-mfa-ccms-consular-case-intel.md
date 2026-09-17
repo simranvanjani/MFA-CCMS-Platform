@@ -4,7 +4,7 @@
 
 **Goal:** Build a working demo that turns synthetic consular case-email PDFs into a structured, AI-enriched, governed case record served through Genie, an AI/BI dashboard, and a Python + Claude Sonnet chat app.
 
-**Architecture:** Medallion pipeline in `simranv.mfa_ccms` — synthetic PDFs land in a UC Volume (Bronze), `ai_parse_document` extracts clean text, `ai_query` populates the provided CCMS schema (Silver) and adds Layer 1 tags + Layer 2 analytical fields (Gold). Gold feeds UC column masks, two Vector Search indexes, a Genie space, an AI/BI dashboard, and a Databricks App.
+**Architecture:** Medallion pipeline in `kauvey_poc.mfa_ccms` — synthetic PDFs land in a UC Volume (Bronze), `ai_parse_document` extracts clean text, `ai_query` populates the provided CCMS schema (Silver) and adds Layer 1 tags + Layer 2 analytical fields (Gold). Gold feeds UC column masks, two Vector Search indexes, a Genie space, an AI/BI dashboard, and a Databricks App.
 
 **Tech Stack:** Databricks CLI (DEFAULT profile), SQL warehouse `3ca7ddd9d10dbbac`, AI Functions (`ai_parse_document`, `ai_query`), `databricks-claude-sonnet-4-5`, `databricks-gte-large-en`, Vector Search, Genie, AI/BI (Lakeview) dashboards, Databricks Apps (Python), local Python for PDF generation (`fpdf2`).
 
@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Catalog/schema: `simranv.mfa_ccms` — names literal, never normalized.
+- Catalog/schema: `kauvey_poc.mfa_ccms` — names literal, never normalized.
 - CLI profile: always pass `--profile DEFAULT`. Never auto-select another profile.
 - SQL warehouse for all SQL / AI Functions: `3ca7ddd9d10dbbac`.
 - LLM for all extraction/enrichment/agent: `databricks-claude-sonnet-4-5`. Embeddings: `databricks-gte-large-en`. No external (non-Databricks) model calls.
@@ -60,7 +60,7 @@
 - Create: `pipeline/config.py`, `pipeline/dbsql.py`
 
 **Interfaces:**
-- Produces: `config.CAT="simranv"`, `config.SCHEMA="mfa_ccms"`, `config.FQ="simranv.mfa_ccms"`, `config.WAREHOUSE="3ca7ddd9d10dbbac"`, `config.LLM="databricks-claude-sonnet-4-5"`, `config.EMB="databricks-gte-large-en"`, `config.PROFILE="DEFAULT"`.
+- Produces: `config.CAT="kauvey_poc"`, `config.SCHEMA="mfa_ccms"`, `config.FQ="kauvey_poc.mfa_ccms"`, `config.WAREHOUSE="3ca7ddd9d10dbbac"`, `config.LLM="databricks-claude-sonnet-4-5"`, `config.EMB="databricks-gte-large-en"`, `config.PROFILE="DEFAULT"`.
 - Produces: `dbsql.run(sql: str) -> list[dict]` — executes SQL on the warehouse via the SDK `StatementExecution` API and returns rows.
 
 - [ ] **Step 1: Verify auth** — `databricks current-user me --profile DEFAULT` → expect `userName": "simran.vanjani@databricks.com"`.
@@ -76,15 +76,15 @@
 **Files:** Create `pipeline/00_schema.sql`
 
 **Interfaces:**
-- Produces: schema `simranv.mfa_ccms`; volume `simranv.mfa_ccms.raw_emails`; volume `simranv.mfa_ccms.sop_corpus`; empty table `simranv.mfa_ccms.case_extracted` with the exact provided schema.
+- Produces: schema `kauvey_poc.mfa_ccms`; volume `kauvey_poc.mfa_ccms.raw_emails`; volume `kauvey_poc.mfa_ccms.sop_corpus`; empty table `kauvey_poc.mfa_ccms.case_extracted` with the exact provided schema.
 
 - [ ] **Step 1: Write DDL** —
-  - `CREATE SCHEMA IF NOT EXISTS simranv.mfa_ccms COMMENT 'MFA CCMS Consular Case Intelligence demo';`
-  - `CREATE VOLUME IF NOT EXISTS simranv.mfa_ccms.raw_emails;`
-  - `CREATE VOLUME IF NOT EXISTS simranv.mfa_ccms.sop_corpus;`
-  - `CREATE TABLE IF NOT EXISTS simranv.mfa_ccms.case_extracted (` + all 51 columns from spec §4.1, all `STRING` except `Do_Not_Modify_Modified_On TIMESTAMP` `);` (Silver table; keep flat, no medallion sub-schemas — use table-name prefixes `bronze_`/`gold_` only where noted).
+  - `CREATE SCHEMA IF NOT EXISTS kauvey_poc.mfa_ccms COMMENT 'MFA CCMS Consular Case Intelligence demo';`
+  - `CREATE VOLUME IF NOT EXISTS kauvey_poc.mfa_ccms.raw_emails;`
+  - `CREATE VOLUME IF NOT EXISTS kauvey_poc.mfa_ccms.sop_corpus;`
+  - `CREATE TABLE IF NOT EXISTS kauvey_poc.mfa_ccms.case_extracted (` + all 52 columns from spec §4.1, all `STRING` except `Do_Not_Modify_Modified_On TIMESTAMP` `);` (Silver table; keep flat, no medallion sub-schemas — use table-name prefixes `bronze_`/`gold_` only where noted).
 - [ ] **Step 2: Execute** each statement via `dbsql.run`.
-- [ ] **Step 3: Verify** — `SHOW TABLES IN simranv.mfa_ccms` includes `case_extracted`; `DESCRIBE simranv.mfa_ccms.case_extracted` returns 51 columns with correct types.
+- [ ] **Step 3: Verify** — `SHOW TABLES IN kauvey_poc.mfa_ccms` includes `case_extracted`; `DESCRIBE kauvey_poc.mfa_ccms.case_extracted` returns 52 columns with correct types.
 - [ ] **Step 4: Commit.**
 
 ---
@@ -101,8 +101,8 @@
 - [ ] **Step 2: Write a case generator** — for each of ~120 cases pick a plausible combination + a random date in 2024–2026, fabricate a Singaporean-style name and NRIC-format string (`[STFG]\d{7}[A-Z]`), and render a **realistic multi-message email thread** (subject line `Re: [<Case_Ref>] <Case_Title>`, mailbox CC, 2–4 messages between officers describing incident → actions → resolution). The thread must *contain* the facts (case type, location, agencies involved, MP escalation if any) in prose so extraction has evidence. Vary which facts appear (some cases omit agency/flags) to exercise the evidence-only rule.
 - [ ] **Step 3: Render to PDF** with `fpdf2` (add to `requirements.txt`). Filename `<Case_Ref>.pdf`.
 - [ ] **Step 4: Write SOP docs** — one short procedure per case type (steps an officer follows), as PDFs in `data/sop/`.
-- [ ] **Step 5: Upload** — `databricks fs cp -r data/emails/ dbfs:/Volumes/simranv/mfa_ccms/raw_emails/ --profile DEFAULT` (and `--overwrite`); same for `data/sop/` → `sop_corpus`. (Use the Volumes path form `/Volumes/...`.)
-- [ ] **Step 6: Verify** — `databricks fs ls dbfs:/Volumes/simranv/mfa_ccms/raw_emails/ --profile DEFAULT` shows ~120 PDFs; `SELECT count(*) FROM READ_FILES('/Volumes/simranv/mfa_ccms/raw_emails/', format=>'binaryFile')` ≈ 120.
+- [ ] **Step 5: Upload** — `databricks fs cp -r data/emails/ dbfs:/Volumes/kauvey_poc/mfa_ccms/raw_emails/ --profile DEFAULT` (and `--overwrite`); same for `data/sop/` → `sop_corpus`. (Use the Volumes path form `/Volumes/...`.)
+- [ ] **Step 6: Verify** — `databricks fs ls dbfs:/Volumes/kauvey_poc/mfa_ccms/raw_emails/ --profile DEFAULT` shows ~120 PDFs; `SELECT count(*) FROM READ_FILES('/Volumes/kauvey_poc/mfa_ccms/raw_emails/', format=>'binaryFile')` ≈ 120.
 - [ ] **Step 7: Commit** (data/ is gitignored; commit the generator only).
 
 ---
@@ -113,18 +113,18 @@
 
 **Interfaces:**
 - Consumes: volume `raw_emails`.
-- Produces: table `simranv.mfa_ccms.bronze_email_parsed(path string, case_ref string, parsed_text string)`.
+- Produces: table `kauvey_poc.mfa_ccms.bronze_email_parsed(path string, case_ref string, parsed_text string)`.
 
 > Ground `ai_parse_document` syntax against the `databricks:databricks-ai-functions` skill before writing.
 
 - [ ] **Step 1: Write parse SQL** —
 ```sql
-CREATE OR REPLACE TABLE simranv.mfa_ccms.bronze_email_parsed AS
+CREATE OR REPLACE TABLE kauvey_poc.mfa_ccms.bronze_email_parsed AS
 SELECT
   path,
   regexp_extract(path, '([^/]+)\\.pdf$', 1) AS case_ref,
   ai_parse_document(content) AS parsed
-FROM READ_FILES('/Volumes/simranv/mfa_ccms/raw_emails/', format => 'binaryFile');
+FROM READ_FILES('/Volumes/kauvey_poc/mfa_ccms/raw_emails/', format => 'binaryFile');
 ```
   then flatten `parsed` to `parsed_text` (the markdown/text field of the parse result) in a follow-up `CREATE OR REPLACE TABLE ... AS SELECT path, case_ref, parsed:document:pages ... ` per the skill's documented output shape.
 - [ ] **Step 2: Execute** (run on a small LIMIT first: create a `_sample` table over 3 files, inspect `parsed_text` non-empty and readable).
@@ -140,17 +140,17 @@ FROM READ_FILES('/Volumes/simranv/mfa_ccms/raw_emails/', format => 'binaryFile')
 
 **Interfaces:**
 - Consumes: `bronze_email_parsed`.
-- Produces: populated `simranv.mfa_ccms.case_extracted` (provided schema) + a temp/staging table `_l1_json` holding the structured extraction.
+- Produces: populated `kauvey_poc.mfa_ccms.case_extracted` (provided schema) + a temp/staging table `_l1_json` holding the structured extraction.
 
 - [ ] **Step 1: Define the extraction prompt + response schema** — one `ai_query` call per row with `responseFormat` (JSON schema) covering the populatable CCMS fields (`Case_Ref, MFA_Ref, Created_On, Case_Title, Case_Subject, Case_Type, Case_Status, Case_Handler, Assigned_HCG, Handled_By, Case_Location, Current_Location, Citizenship, Origin, Case_Description, Assistance_Required, Advice_Provided___Follow_up, Category_Multiselect, Sub_Category_Multiselect, Tag, MP_Name, Covering_MP, MP_Constituency_Division, Incident_ID, Caller___Informant, Registrant, Title_Name, New_Email, Feedback_*`). Prompt enforces evidence-only + "return null when not stated." Model `databricks-claude-sonnet-4-5`.
 ```sql
-CREATE OR REPLACE TABLE simranv.mfa_ccms._l1_json AS
+CREATE OR REPLACE TABLE kauvey_poc.mfa_ccms._l1_json AS
 SELECT case_ref, ai_query(
   'databricks-claude-sonnet-4-5',
   'Extract consular case fields from this email thread as JSON. Apply a value ONLY when the text explicitly supports it; use null otherwise. Thread:\n' || parsed_text,
   responseFormat => '{"type":"json_schema","json_schema":{"name":"case","schema":{ ... }}}'
 ) AS js
-FROM simranv.mfa_ccms.bronze_email_parsed;
+FROM kauvey_poc.mfa_ccms.bronze_email_parsed;
 ```
 - [ ] **Step 2: Insert into `case_extracted`** — parse `js` fields into the exact columns; set `Do_Not_Modify_Case`/`Do_Not_Modify_Row_Checksum` = `sha2(concat_ws('|', <business cols>), 256)`; `Do_Not_Modify_Modified_On`/`Modified_On` = `current_timestamp()`; `New_Case='Yes'`; `No_of_Open_Child_Cases='0'`.
 - [ ] **Step 3: Validate on 5 rows first** — inspect that Case_Type/Case_Location/Case_Handler are sensibly populated and null where absent.
@@ -165,7 +165,7 @@ FROM simranv.mfa_ccms.bronze_email_parsed;
 
 **Interfaces:**
 - Consumes: `case_extracted`, `bronze_email_parsed`.
-- Produces: table `simranv.mfa_ccms.gold_case_intelligence` = all `case_extracted` columns + `L1_Country, L1_Mission, L1_Case_Type, L1_Agencies array<string>, L1_Situational_Flags array<string>, L1_Status, L2_Summary_Pathway, L2_Assistance_Req_vs_Provided, L2_Complications_Delays, L2_External_Resources, L2_Lessons_Learnt, Case_Id, Resolution_Days int`.
+- Produces: table `kauvey_poc.mfa_ccms.gold_case_intelligence` = all `case_extracted` columns + `L1_Country, L1_Mission, L1_Case_Type, L1_Agencies array<string>, L1_Situational_Flags array<string>, L1_Status, L2_Summary_Pathway, L2_Assistance_Req_vs_Provided, L2_Complications_Delays, L2_External_Resources, L2_Lessons_Learnt, Case_Id, Resolution_Days int`.
 
 - [ ] **Step 1: L1 derived tags** — a second `ai_query` (responseFormat with `L1_Country`, `L1_Mission`, `L1_Case_Type`, `L1_Agencies` array, `L1_Situational_Flags` array, `L1_Status`) over `parsed_text`, evidence-only. Keyed by case_ref.
 - [ ] **Step 2: L2 analytical fields** — one `ai_query` returning the five free-text fields (summary/pathway, assistance req vs provided, complications/delays, external resources, lessons learnt) from `parsed_text`.
@@ -181,21 +181,21 @@ FROM simranv.mfa_ccms.bronze_email_parsed;
 
 **Interfaces:**
 - Consumes: `gold_case_intelligence`.
-- Produces: masking function `simranv.mfa_ccms.mask_pii`; column masks applied to `Title_Name, Caller___Informant, Registrant, New_Email`; view `simranv.mfa_ccms.tag_accuracy`.
+- Produces: masking function `kauvey_poc.mfa_ccms.mask_pii`; column masks applied to `Title_Name, Caller___Informant, Registrant, New_Email`; view `kauvey_poc.mfa_ccms.tag_accuracy`.
 
 - [ ] **Step 1: Create mask function** —
 ```sql
-CREATE OR REPLACE FUNCTION simranv.mfa_ccms.mask_pii(v STRING)
+CREATE OR REPLACE FUNCTION kauvey_poc.mfa_ccms.mask_pii(v STRING)
 RETURN CASE WHEN is_account_group_member('consular_privileged') THEN v ELSE '***REDACTED***' END;
 ```
-- [ ] **Step 2: Apply masks** — `ALTER TABLE simranv.mfa_ccms.gold_case_intelligence ALTER COLUMN Title_Name SET MASK simranv.mfa_ccms.mask_pii;` (repeat for the 4 PII columns).
+- [ ] **Step 2: Apply masks** — `ALTER TABLE kauvey_poc.mfa_ccms.gold_case_intelligence ALTER COLUMN Title_Name SET MASK kauvey_poc.mfa_ccms.mask_pii;` (repeat for the 4 PII columns).
 - [ ] **Step 3: Accuracy view** —
 ```sql
-CREATE OR REPLACE VIEW simranv.mfa_ccms.tag_accuracy AS
+CREATE OR REPLACE VIEW kauvey_poc.mfa_ccms.tag_accuracy AS
 SELECT
   avg(CASE WHEN lower(trim(L1_Case_Type))=lower(trim(Case_Type)) THEN 1.0 ELSE 0.0 END) AS case_type_agreement,
   count(*) AS n
-FROM simranv.mfa_ccms.gold_case_intelligence
+FROM kauvey_poc.mfa_ccms.gold_case_intelligence
 WHERE Case_Type IS NOT NULL AND L1_Case_Type IS NOT NULL;
 ```
 - [ ] **Step 4: Verify** — `SELECT * FROM tag_accuracy` returns a fraction 0–1 with n>0; selecting a masked column as current user returns `***REDACTED***` (or real value if you're in the group — note which).
@@ -209,7 +209,7 @@ WHERE Case_Type IS NOT NULL AND L1_Case_Type IS NOT NULL;
 
 **Interfaces:**
 - Consumes: `gold_case_intelligence`, `bronze_email_parsed`, volume `sop_corpus`.
-- Produces: VS endpoint `mfa_ccms_vs`; index `simranv.mfa_ccms.case_email_index` (over scrubbed email chunks); index `simranv.mfa_ccms.sop_index` (over SOP chunks). Source delta tables `gold_email_chunks` and `gold_sop_chunks` with CDF enabled.
+- Produces: VS endpoint `mfa_ccms_vs`; index `kauvey_poc.mfa_ccms.case_email_index` (over scrubbed email chunks); index `kauvey_poc.mfa_ccms.sop_index` (over SOP chunks). Source delta tables `gold_email_chunks` and `gold_sop_chunks` with CDF enabled.
 
 > Ground Vector Search API against `databricks:databricks-vector-search` skill.
 

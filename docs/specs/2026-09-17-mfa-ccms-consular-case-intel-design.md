@@ -21,7 +21,7 @@ This is a **demonstration build**, not a production MFA deployment.
 | Item | Value |
 |------|-------|
 | CLI profile | `DEFAULT` (workspace `adb-7405605297651217.17`, the "kauvey-poc" workspace) |
-| Catalog / schema | `simranv.mfa_ccms` (new schema) |
+| Catalog / schema | `kauvey_poc.mfa_ccms` (new schema) |
 | Extraction / enrichment / agent LLM | `databricks-claude-sonnet-4-5` |
 | Embeddings | `databricks-gte-large-en` |
 | SQL warehouse | `3ca7ddd9d10dbbac` |
