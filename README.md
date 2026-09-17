@@ -45,6 +45,18 @@ raw_emails (Volume, 120 PDFs) --ai_parse_document--> bronze_email_parsed
 Rebuild data + serving: `python -m pipeline.run_all`
 One-time: `python -m genie.create_space`, `python -m pipeline.07_dashboard`, app deploy (see below).
 
+## One-click install (customer environment)
+
+`install.py` is a **Databricks notebook** that stands up the entire platform in a fresh
+workspace — schema, data parsing, Layer 1/2, governance, Vector Search, Genie, dashboard, and
+the app. Import this repo as a **Git folder**, open `install.py`, set the widgets, Run All.
+
+- **`data_mode = synthetic`** — generates demo case-email PDFs (no real data needed).
+- **`data_mode = byo`** — deploy against the **customer's real data**: drop their case-email PDFs
+  into the `raw_emails` volume (or point `source_pdf_path` at an existing folder) and run. Every
+  downstream layer (tags, analytics, search, Genie, dashboard, app) is derived automatically.
+- Set `warehouse_id` to enable Genie + dashboard + app; requires **serverless or DBR 17.3+**.
+
 ## Files
 
 - `pipeline/` — `config.py`, `dbsql.py`, `00_schema.py` … `07_dashboard.py`, `run_all.py`
