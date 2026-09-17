@@ -65,8 +65,49 @@ with tab_case:
             st.write(c.get("Case_Description"))
 
 with tab_dash:
+    import pandas as pd
+    import tools as _t
+
     if DASHBOARD_URL:
-        st.markdown(f"[Open the full AI/BI dashboard]({DASHBOARD_URL})")
-        st.components.v1.iframe(DASHBOARD_URL, height=800)
-    else:
-        st.info("Set DASHBOARD_URL to embed the Layer 3 dashboard.")
+        st.markdown(f"↗ [Open the full AI/BI dashboard in Databricks]({DASHBOARD_URL})")
+
+    def df(sql):
+        cols, rows = _t._query(sql)
+        return pd.DataFrame(rows, columns=cols)
+
+    G = f"{_t.FQ}.gold_case_intelligence"
+
+    @st.cache_data(ttl=300)
+    def load():
+        kpi = df(f"SELECT count(*) total, "
+                 f"sum(CASE WHEN Case_Status='Closed' THEN 1 ELSE 0 END) closed, "
+                 f"round(avg(Resolution_Days),1) avg_days FROM {G}")
+        by_type = df(f"SELECT Case_Type, count(*) cases FROM {G} GROUP BY Case_Type ORDER BY cases DESC")
+        by_country = df(f"SELECT L1_Country, count(*) cases FROM {G} GROUP BY L1_Country ORDER BY cases DESC")
+        by_mission = df(f"SELECT Assigned_HCG mission, count(*) cases FROM {G} GROUP BY Assigned_HCG ORDER BY cases DESC")
+        res = df(f"SELECT Case_Type, round(avg(Resolution_Days),1) avg_days FROM {G} "
+                 f"WHERE Resolution_Days IS NOT NULL GROUP BY Case_Type ORDER BY avg_days DESC")
+        flags = df(f"SELECT flag, count(*) cases FROM {G} LATERAL VIEW explode(L1_Situational_Flags) t AS flag "
+                   f"GROUP BY flag ORDER BY cases DESC")
+        return kpi, by_type, by_country, by_mission, res, flags
+
+    kpi, by_type, by_country, by_mission, res, flags = load()
+
+    k1, k2, k3 = st.columns(3)
+    k1.metric("Total cases", int(kpi["total"][0]))
+    k2.metric("Closed cases", int(kpi["closed"][0]))
+    k3.metric("Avg resolution (days)", float(kpi["avg_days"][0]))
+
+    c1, c2 = st.columns(2)
+    with c1:
+        st.subheader("Case-type distribution")
+        st.bar_chart(by_type.set_index("Case_Type"))
+        st.subheader("Handling volume by mission")
+        st.bar_chart(by_mission.set_index("mission"))
+    with c2:
+        st.subheader("Cases by country")
+        st.bar_chart(by_country.set_index("L1_Country"))
+        st.subheader("Avg resolution days by case type")
+        st.bar_chart(res.set_index("Case_Type"))
+    st.subheader("Situational flags")
+    st.bar_chart(flags.set_index("flag"))
