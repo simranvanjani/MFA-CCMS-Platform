@@ -358,9 +358,9 @@ env:
   - {{name: IDX_SOP, value: "{IDX_SOP}"}}
   - {{name: CCMS_LLM, value: "{LLM}"}}
 """
-    with open("/tmp/app.yaml", "w") as f: f.write(app_yaml)
-    w.workspace.upload(f"{APP_SRC}/app.yaml", app_yaml.encode(), format=w.workspace.ImportFormat.AUTO, overwrite=True) \
-        if hasattr(w.workspace, "ImportFormat") else None
+    from databricks.sdk.service.workspace import ImportFormat
+    # Overwrite app.yaml in the Git-folder app path with this environment's config.
+    w.workspace.upload(f"{APP_SRC}/app.yaml", app_yaml.encode(), format=ImportFormat.RAW, overwrite=True)
     try:
         w.apps.get(name=APP_NAME)
     except Exception:
