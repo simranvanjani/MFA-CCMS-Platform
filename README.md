@@ -4,6 +4,8 @@ Turns synthetic consular case-email PDFs into a structured, AI-enriched, governe
 served through Genie, an AI/BI dashboard, and a Case Intelligence chat app. Built on Databricks
 per the *Consular Case Intelligence* PRD (MFA Singapore).
 
+- **Architecture:** [`ARCHITECTURE.md`](ARCHITECTURE.md) (build-time + runtime diagrams)
+- **Install (customer):** [`INSTALL.md`](INSTALL.md)
 - **Spec:** `docs/specs/2026-09-17-mfa-ccms-consular-case-intel-design.md`
 - **Plan:** `docs/plans/2026-09-17-mfa-ccms-consular-case-intel.md`
 

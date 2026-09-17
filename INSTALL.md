@@ -62,8 +62,27 @@ Open `install.py`. Attach it to serverless/DBR 17.3+ compute. The widgets at the
 | **catalog** | Target catalog (created if missing), e.g. `mfa_ccms`. |
 | **schema** | Target schema, e.g. `consular`. |
 | **warehouse_id** | Your Pro/Serverless SQL warehouse id. Leave blank to build data only (no Genie/dashboard/app). |
-| **data_mode** | `byo` for your real data (see Step 3), or `synthetic` for a self-contained demo. |
-| **source_pdf_path** | *(BYO only, optional)* an existing folder of PDFs to copy in. Leave blank if you upload straight to the volume. |
+| **ingest_mode** | `pdf` (parse PDFs), `parsed_table` (you already parsed the emails), or `case_table` (you already built the structured case table). See below. |
+| **source_table** | *(parsed_table / case_table)* the fully-qualified existing table to read from. |
+| **source_case_ref_col / source_text_col** | *(parsed_table)* the case-id and email-text column names in your parsed table. |
+| **data_mode** | *(pdf mode)* `byo` for your real PDFs (Step 3), or `synthetic` for a self-contained demo. |
+| **source_pdf_path** | *(pdf + BYO, optional)* an existing folder of PDFs to copy in. Leave blank if you upload straight to the volume. |
+
+### Already parsed the emails or built the table? Point at it directly.
+
+You don't have to re-parse PDFs if the work is already done:
+
+- **`ingest_mode = parsed_table`** — you already extracted the email text into a table. Set
+  `source_table` and the `source_case_ref_col` / `source_text_col` names. The installer skips
+  `ai_parse_document` and runs Layer 1 + Layer 2 + search + serving on your table.
+- **`ingest_mode = case_table`** — you already built the **structured case table** (the 52-column
+  CCMS schema, or a superset). Set `source_table`. The installer adopts it as `case_extracted`,
+  **skips parsing and Layer 1**, and runs Layer 2 analytics + governance + search + Genie +
+  dashboard + app on top of it. Layer 2 and similar-case search use the narrative it derives from
+  your text columns (`Case_Description`, `Additional_Information`, `Assistance_Required`,
+  `Advice_Provided___Follow_up`, `Case_Subject`, `Case_Title`) — so richer text columns give
+  richer analytics. If you also keep the raw email text, `parsed_table` mode yields the best
+  Layer 2 quality.
 | **llm_endpoint** | LLM serving endpoint name. |
 | **embedding_endpoint** | Embedding serving endpoint name. |
 | **app_name** | Name for the deployed app, e.g. `mfa-ccms-intel`. |

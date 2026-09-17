@@ -27,7 +27,11 @@
 dbutils.widgets.text("catalog", "mfa_ccms", "Catalog")
 dbutils.widgets.text("schema", "consular", "Schema")
 dbutils.widgets.text("warehouse_id", "", "SQL Warehouse id (for Genie + app)")
-dbutils.widgets.dropdown("data_mode", "synthetic", ["synthetic", "byo"], "Data mode")
+dbutils.widgets.dropdown("ingest_mode", "pdf", ["pdf", "parsed_table", "case_table"], "Ingest mode")
+dbutils.widgets.text("source_table", "", "Existing table (for parsed_table / case_table modes)")
+dbutils.widgets.text("source_case_ref_col", "case_ref", "parsed_table: case-ref column")
+dbutils.widgets.text("source_text_col", "parsed_text", "parsed_table: email-text column")
+dbutils.widgets.dropdown("data_mode", "synthetic", ["synthetic", "byo"], "pdf mode: synthetic or BYO")
 dbutils.widgets.text("source_pdf_path", "", "BYO: existing PDF folder (blank = use raw_emails volume)")
 dbutils.widgets.text("llm_endpoint", "databricks-claude-sonnet-4-5", "LLM endpoint")
 dbutils.widgets.text("embedding_endpoint", "databricks-gte-large-en", "Embedding endpoint")
@@ -38,6 +42,10 @@ CAT = dbutils.widgets.get("catalog").strip()
 SCH = dbutils.widgets.get("schema").strip()
 FQ = f"{CAT}.{SCH}"
 WAREHOUSE = dbutils.widgets.get("warehouse_id").strip()
+INGEST_MODE = dbutils.widgets.get("ingest_mode")           # pdf | parsed_table | case_table
+SOURCE_TABLE = dbutils.widgets.get("source_table").strip()
+SRC_REF_COL = dbutils.widgets.get("source_case_ref_col").strip() or "case_ref"
+SRC_TXT_COL = dbutils.widgets.get("source_text_col").strip() or "parsed_text"
 DATA_MODE = dbutils.widgets.get("data_mode")
 SRC_PDF = dbutils.widgets.get("source_pdf_path").strip()
 LLM = dbutils.widgets.get("llm_endpoint").strip()
@@ -50,7 +58,9 @@ VOL_SOP = f"/Volumes/{CAT}/{SCH}/sop_corpus"
 VS_ENDPOINT = f"{SCH}_vs"[:60]
 IDX_EMAIL = f"{FQ}.case_email_index"
 IDX_SOP = f"{FQ}.sop_index"
-print(f"Target {FQ} | mode={DATA_MODE} | LLM={LLM} | warehouse={WAREHOUSE or '(required for Genie/app)'}")
+print(f"Target {FQ} | ingest={INGEST_MODE} | LLM={LLM} | warehouse={WAREHOUSE or '(required for Genie/app)'}")
+if INGEST_MODE in ("parsed_table", "case_table") and not SOURCE_TABLE:
+    raise ValueError(f"ingest_mode={INGEST_MODE} requires source_table to be set.")
 
 from databricks.sdk import WorkspaceClient
 w = WorkspaceClient()
@@ -88,9 +98,11 @@ print(f"Schema + volumes + case_extracted ({len(COLUMNS)} cols) ready.")
 
 # COMMAND ----------
 
-# DBTITLE 1,2 · Data — synthetic generator OR bring-your-own PDFs
+# DBTITLE 1,2 · Data — synthetic generator OR bring-your-own PDFs (pdf mode only)
 import os, subprocess, sys
-if DATA_MODE == "synthetic":
+if INGEST_MODE != "pdf":
+    print(f"ingest_mode={INGEST_MODE}: skipping PDF ingest; using existing table {SOURCE_TABLE}.")
+elif DATA_MODE == "synthetic":
     # Reuse the repo's generator, writing PDFs straight into the volumes.
     nb = dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get()
     REPO_ROOT = "/Workspace" + nb.rsplit("/", 1)[0]
@@ -112,28 +124,42 @@ else:
 
 # COMMAND ----------
 
-# DBTITLE 1,3 · Parse PDFs (ai_parse_document) -> bronze_email_parsed
-spark.sql(f"""
-CREATE OR REPLACE TABLE {FQ}.bronze_email_parsed AS
-SELECT path,
-  regexp_extract(txt, '\\\\[([A-Za-z0-9/_-]+)\\\\]', 1) AS case_ref_hint,
-  txt AS parsed_text, err AS parse_error
-FROM (
-  SELECT path,
-    concat_ws('\\n', transform(variant_get(parsed,'$.document.elements','ARRAY<VARIANT>'),
-      e -> variant_get(e,'$.content','STRING'))) AS txt,
-    parsed:error_status AS err
-  FROM (SELECT path, ai_parse_document(content) AS parsed
-        FROM read_files('{VOL_EMAILS}/', format => 'binaryFile'))
-)
-""")
-# Stable Case_Ref: subject-line token if present, else the filename.
-spark.sql(f"""
-CREATE OR REPLACE TABLE {FQ}.bronze_email_parsed AS
-SELECT *, coalesce(nullif(case_ref_hint,''), regexp_extract(path, '([^/]+)\\\\.pdf$', 1)) AS case_ref
-FROM {FQ}.bronze_email_parsed
-""")
-print("Parsed:", spark.sql(f"SELECT count(*) c FROM {FQ}.bronze_email_parsed").first().c, "documents")
+# DBTITLE 1,3 · Ingest text -> bronze_email_parsed(case_ref, parsed_text)
+if INGEST_MODE == "pdf":
+    # Parse PDFs with ai_parse_document.
+    spark.sql(f"""
+    CREATE OR REPLACE TABLE {FQ}.bronze_email_parsed AS
+    SELECT path, regexp_extract(txt, '\\\\[([A-Za-z0-9/_-]+)\\\\]', 1) AS case_ref_hint,
+      txt AS parsed_text, err AS parse_error
+    FROM (
+      SELECT path,
+        concat_ws('\\n', transform(variant_get(parsed,'$.document.elements','ARRAY<VARIANT>'),
+          e -> variant_get(e,'$.content','STRING'))) AS txt,
+        parsed:error_status AS err
+      FROM (SELECT path, ai_parse_document(content) AS parsed
+            FROM read_files('{VOL_EMAILS}/', format => 'binaryFile')))
+    """)
+    spark.sql(f"""CREATE OR REPLACE TABLE {FQ}.bronze_email_parsed AS
+    SELECT *, coalesce(nullif(case_ref_hint,''), regexp_extract(path,'([^/]+)\\\\.pdf$',1)) AS case_ref
+    FROM {FQ}.bronze_email_parsed""")
+
+elif INGEST_MODE == "parsed_table":
+    # Customer already parsed the emails — point straight at their table.
+    spark.sql(f"""CREATE OR REPLACE TABLE {FQ}.bronze_email_parsed AS
+    SELECT `{SRC_REF_COL}` AS case_ref, `{SRC_TXT_COL}` AS parsed_text FROM {SOURCE_TABLE}""")
+
+elif INGEST_MODE == "case_table":
+    # Customer already built the structured case table — adopt it as case_extracted,
+    # and derive a narrative text column for Layer 2 + similar-case search.
+    spark.sql(f"CREATE OR REPLACE TABLE {FQ}.case_extracted AS SELECT * FROM {SOURCE_TABLE}")
+    spark.sql(f"""CREATE OR REPLACE TABLE {FQ}.bronze_email_parsed AS
+    SELECT Case_Ref AS case_ref,
+      concat_ws(' ', coalesce(Case_Subject,''), coalesce(Case_Title,''), coalesce(Case_Description,''),
+        coalesce(Additional_Information,''), coalesce(Assistance_Required,''),
+        coalesce(Advice_Provided___Follow_up,'')) AS parsed_text
+    FROM {FQ}.case_extracted""")
+
+print("bronze_email_parsed rows:", spark.sql(f"SELECT count(*) c FROM {FQ}.bronze_email_parsed").first().c)
 
 # COMMAND ----------
 
@@ -150,30 +176,32 @@ P1 = ("You are extracting structured fields from a consular case email thread. R
  "Assigned_HCG is the responsible overseas mission. Case_Location is 'City, Country'. Created_On is "
  "the first message date as YYYY-MM-DD. Email thread:\\n").replace("'", "''")
 
-spark.sql(f"""
-CREATE OR REPLACE TABLE {FQ}._l1_json AS
-SELECT case_ref, parsed_text,
-  from_json(regexp_extract(
-    ai_query('{LLM}', concat('{P1}', parsed_text), failOnError => false).result, '(?s)[{{].*[}}]', 0),
-    '{STRUCT1}') AS js
-FROM {FQ}.bronze_email_parsed
-""")
-
-# Map to the exact schema (INSERT BY NAME). System/audit cols set here; unlisted cols -> NULL.
-exprs = {f: f"js.{f}" for f in L1_FIELDS}
-exprs.update({
-  "Do_Not_Modify_Case": "case_ref", "Case_Ref": "case_ref",
-  "Do_Not_Modify_Modified_On": "current_timestamp()", "Modified_On": "cast(current_timestamp() as string)",
-  "New_Case": "'Yes'", "No_of_Open_Child_Cases": "'0'",
-  "Allow_Case_History_Access": "'Yes'", "Allow_LRS_Access": "'No'",
-})
-business = [c for c, _ in COLUMNS if not c.startswith("Do_Not_Modify_")]
-exprs["Do_Not_Modify_Row_Checksum"] = ("sha2(concat_ws('|', "
-  + ", ".join(f"coalesce({exprs.get(c,'cast(null as string)')},'')" for c in business) + "), 256)")
-select_cols = ",\n  ".join(f"{exprs.get(c,'cast(null as string)')} AS {c}" for c, _ in COLUMNS)
-spark.sql(f"TRUNCATE TABLE {FQ}.case_extracted")
-spark.sql(f"INSERT INTO {FQ}.case_extracted BY NAME\nSELECT\n  {select_cols}\nFROM {FQ}._l1_json")
-print("case_extracted rows:", spark.sql(f"SELECT count(*) c FROM {FQ}.case_extracted").first().c)
+if INGEST_MODE == "case_table":
+    print("case_table mode: case_extracted supplied by the customer — skipping Layer 1 extraction.")
+else:
+    spark.sql(f"""
+    CREATE OR REPLACE TABLE {FQ}._l1_json AS
+    SELECT case_ref, parsed_text,
+      from_json(regexp_extract(
+        ai_query('{LLM}', concat('{P1}', parsed_text), failOnError => false).result, '(?s)[{{].*[}}]', 0),
+        '{STRUCT1}') AS js
+    FROM {FQ}.bronze_email_parsed
+    """)
+    # Map to the exact schema (INSERT BY NAME). System/audit cols set here; unlisted cols -> NULL.
+    exprs = {f: f"js.{f}" for f in L1_FIELDS}
+    exprs.update({
+      "Do_Not_Modify_Case": "case_ref", "Case_Ref": "case_ref",
+      "Do_Not_Modify_Modified_On": "current_timestamp()", "Modified_On": "cast(current_timestamp() as string)",
+      "New_Case": "'Yes'", "No_of_Open_Child_Cases": "'0'",
+      "Allow_Case_History_Access": "'Yes'", "Allow_LRS_Access": "'No'",
+    })
+    business = [c for c, _ in COLUMNS if not c.startswith("Do_Not_Modify_")]
+    exprs["Do_Not_Modify_Row_Checksum"] = ("sha2(concat_ws('|', "
+      + ", ".join(f"coalesce({exprs.get(c,'cast(null as string)')},'')" for c in business) + "), 256)")
+    select_cols = ",\n  ".join(f"{exprs.get(c,'cast(null as string)')} AS {c}" for c, _ in COLUMNS)
+    spark.sql(f"TRUNCATE TABLE {FQ}.case_extracted")
+    spark.sql(f"INSERT INTO {FQ}.case_extracted BY NAME\nSELECT\n  {select_cols}\nFROM {FQ}._l1_json")
+    print("case_extracted rows:", spark.sql(f"SELECT count(*) c FROM {FQ}.case_extracted").first().c)
 
 # COMMAND ----------
 
