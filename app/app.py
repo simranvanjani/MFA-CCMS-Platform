@@ -58,11 +58,11 @@ def filters(request: Request):
 
 @app.get("/api/cases")
 def cases(request: Request, page: int = 0, q: str = "", case_type: str = "",
-          country: str = "", status: str = "", flag: str = ""):
+          country: str = "", status: str = "", flag: str = "", sort: str = "newest"):
     w = user_client(request)
     f = {"q": q, "case_type": case_type, "country": country, "status": status, "flag": flag}
     f = {k: v for k, v in f.items() if v}
-    cols, rows = tools.list_cases_page(page, PAGE_SIZE, w, f)
+    cols, rows = tools.list_cases_page(page, PAGE_SIZE, w, f, sort)
     return {"total": tools.count_cases(w, f), "page": page, "page_size": PAGE_SIZE,
             "rows": [dict(zip(cols, r)) for r in rows]}
 
@@ -96,6 +96,17 @@ class StepIn(BaseModel):
 @app.post("/api/step")
 def step(s: StepIn, request: Request):
     tools.set_step(s.ref, s.step_idx, s.done, user_email(request), user_client(request))
+    return {"ok": True}
+
+
+class StatusIn(BaseModel):
+    ref: str
+    status: str
+
+
+@app.post("/api/status")
+def status(s: StatusIn, request: Request):
+    tools.set_status(s.ref, s.status, user_email(request), user_client(request))
     return {"ok": True}
 
 

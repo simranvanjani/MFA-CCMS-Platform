@@ -131,14 +131,30 @@ def count_cases(w=None, filters=None) -> int:
     return int(rows[0][0]) if rows else 0
 
 
-def list_cases_page(page: int, page_size: int = 20, w=None, filters=None):
-    """Return (columns, rows) for one page, newest first, honoring filters."""
+_SORTS = {
+    "newest": "to_date(Created_On) DESC, Case_Ref DESC",
+    "oldest": "to_date(Created_On) ASC, Case_Ref ASC",
+    "res_asc": "Resolution_Days ASC NULLS LAST, to_date(Created_On) DESC",
+    "res_desc": "Resolution_Days DESC NULLS LAST, to_date(Created_On) DESC",
+}
+
+
+def list_cases_page(page: int, page_size: int = 20, w=None, filters=None, sort="newest"):
+    """Return (columns, rows) for one page, honoring filters + sort."""
     offset = page * page_size
+    order = _SORTS.get(sort, _SORTS["newest"])
     return _query(
         "SELECT Case_Ref, Case_Type, L1_Country AS Country, Assigned_HCG AS Mission, "
-        "Case_Status AS Status, Created_On "
+        "Case_Status AS Status, Created_On, Resolution_Days "
         f"FROM {FQ}.gold_case_intelligence{_where(filters)} "
-        f"ORDER BY to_date(Created_On) DESC, Case_Ref DESC LIMIT {page_size} OFFSET {offset}", w)
+        f"ORDER BY {order} LIMIT {page_size} OFFSET {offset}", w)
+
+
+def set_status(case_ref: str, status: str, author: str, w=None):
+    """Update a case's operational status and log an audit note."""
+    cr, st = _esc(case_ref), _esc(status)
+    _query(f"UPDATE {FQ}.gold_case_intelligence SET Case_Status = '{st}' WHERE Case_Ref = '{cr}'", w)
+    add_note(case_ref, author, f"Status changed to {status}.", w)
 
 
 def filter_options(w=None):

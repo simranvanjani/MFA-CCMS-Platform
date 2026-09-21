@@ -87,6 +87,9 @@ tbody tr:hover{background:var(--surface-2)}
 .pill::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
 .pill.closed{color:var(--ok);background:var(--ok-bg)}
 .pill.pending{color:var(--warn);background:var(--warn-bg)}
+.pill.hold{color:var(--muted);background:var(--surface-2)}
+.pill.progress{color:var(--brand-ink);background:var(--brand-soft)}
+.statuslbl{display:inline-flex;align-items:center;gap:8px;font-size:12px;color:var(--faint);margin-left:auto}
 .chip{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:500;padding:3px 9px;border-radius:7px;background:var(--surface-2);border:1px solid var(--border);color:var(--muted)}
 .chip.agency{background:var(--brand-soft);border-color:transparent;color:var(--brand-ink)}
 .chip.crit{background:var(--crit-bg);color:var(--crit);border-color:transparent}
@@ -141,11 +144,11 @@ tbody tr:hover{background:var(--surface-2)}
 .kpi .n{font-size:30px;font-weight:600;font-family:var(--mono);letter-spacing:-.02em}
 .kpi .k{font-size:12px;color:var(--muted);margin-top:2px}
 .charts{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-.bar{display:flex;align-items:center;gap:10px;margin:9px 0;font-size:12.5px}
-.bar .lab{width:130px;color:var(--muted);flex:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.bar .track{flex:1;height:9px;background:var(--surface-2);border-radius:100px;overflow:hidden}
-.bar .fill{height:100%;background:var(--brand);border-radius:100px}
-.bar .val{width:32px;text-align:right;font-family:var(--mono);color:var(--ink)}
+.bar{display:flex;align-items:center;gap:12px;margin:11px 0;font-size:12.5px}
+.bar .lab{width:150px;color:var(--ink);flex:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar .track{flex:1;height:12px;background:var(--surface-2);border:1px solid var(--border);border-radius:100px;overflow:hidden}
+.bar .fill{height:100%;min-width:6px;background:linear-gradient(90deg,var(--brand-ink),var(--brand));border-radius:100px}
+.bar .val{width:44px;text-align:right;font-family:var(--mono);color:var(--ink);font-weight:600}
 .chat{max-width:760px}
 .msg{display:flex;gap:11px;margin-bottom:18px}
 .msg .av{flex:none;width:30px;height:30px;border-radius:8px;display:grid;place-items:center;font-size:13px;font-weight:600}
@@ -194,6 +197,12 @@ tbody tr:hover{background:var(--surface-2)}
         <select id="f_type" class="fsel"><option value="">All case types</option></select>
         <select id="f_flag" class="fsel"><option value="">All flags</option></select>
         <select id="f_status" class="fsel"><option value="">Any status</option></select>
+        <select id="f_sort" class="fsel">
+          <option value="newest">Newest first</option>
+          <option value="oldest">Oldest first</option>
+          <option value="res_asc">Resolution: fastest</option>
+          <option value="res_desc">Resolution: slowest</option>
+        </select>
         <button id="f_clear" class="fclear">Clear</button>
         <span class="count" style="margin-left:auto"><b id="tot">—</b> cases · newest first</span>
       </div>
@@ -239,9 +248,10 @@ function setView(v){
 document.querySelectorAll('.nav').forEach(n=>n.onclick=()=>setView(n.dataset.view));
 
 /* cases list */
+function pillCls(s){s=(s||'').toLowerCase();if(s==='closed')return 'closed';if(s.includes('hold'))return 'hold';if(s.includes('progress'))return 'progress';return 'pending';}
 function _filters(){
   return {q:$('#q').value.trim(), country:$('#f_country').value, case_type:$('#f_type').value,
-          flag:$('#f_flag').value, status:$('#f_status').value};
+          flag:$('#f_flag').value, status:$('#f_status').value, sort:$('#f_sort').value};
 }
 async function loadFilters(){
   try{
@@ -269,7 +279,7 @@ async function loadCases(p){
   $('#next').disabled=page>=pages-1;
   if(!d.rows.length){$('#rows').innerHTML='<tr><td colspan="7" class="loading">No cases match these filters.</td></tr>';return;}
   $('#rows').innerHTML=d.rows.map(r=>{
-    const pill=r.Status==='Closed'?'closed':'pending';
+    const pill=pillCls(r.Status);
     return `<tr>
       <td><div class="ref">${esc(r.Case_Ref)}</div></td>
       <td>${esc(r.Case_Type)}</td>
@@ -283,8 +293,8 @@ async function loadCases(p){
 }
 let _qt;
 $('#q').oninput=()=>{clearTimeout(_qt);_qt=setTimeout(()=>loadCases(0),300);};
-['#f_country','#f_type','#f_flag','#f_status'].forEach(id=>$(id).onchange=()=>loadCases(0));
-$('#f_clear').onclick=()=>{$('#q').value='';['#f_country','#f_type','#f_flag','#f_status'].forEach(id=>$(id).value='');loadCases(0);};
+['#f_country','#f_type','#f_flag','#f_status','#f_sort'].forEach(id=>$(id).onchange=()=>loadCases(0));
+$('#f_clear').onclick=()=>{$('#q').value='';['#f_country','#f_type','#f_flag','#f_status'].forEach(id=>$(id).value='');$('#f_sort').value='newest';loadCases(0);};
 $('#first').onclick=()=>loadCases(0);
 $('#prev').onclick=()=>loadCases(page-1);
 $('#next').onclick=()=>loadCases(page+1);
@@ -296,7 +306,9 @@ async function openCase(ref){
   $('#recbody').innerHTML='<div class="loading">Loading case…</div>';
   const d=await (await fetch('/api/case?ref='+encodeURIComponent(ref))).json();
   if(d.error){$('#recbody').innerHTML='<div class="loading">Case not found.</div>';return;}
-  const c=d.case, pill=c.Case_Status==='Closed'?'closed':'pending';
+  const c=d.case, pill=pillCls(c.Case_Status);
+  const STATUSES=['Pending','In Progress','On Hold','Closed'];
+  const statusOpts=STATUSES.map(s=>`<option ${s===c.Case_Status?'selected':''}>${s}</option>`).join('');
   const flags=(c.L1_Situational_Flags||[]);
   const flagChips=flags.length?flags.map(f=>`<span class="chip ${FLAGCLS[f]||''}">${esc(f)}</span>`).join('')
     :'<span class="chip" style="color:var(--faint)">No situational flags</span>';
@@ -308,7 +320,8 @@ async function openCase(ref){
     ['Lessons learnt','L2_Lessons_Learnt']].map(([t,k])=>`<div class="l2"><div class="t">${t}</div><p>${esc(c[k])}</p></div>`).join('');
   $('#recbody').innerHTML=`
     <button class="back" id="backbtn">← Back to cases</button>
-    <div class="rechead"><h2>${esc(c.Case_Ref)}</h2><span class="pill ${pill}">${esc(c.Case_Status)}</span></div>
+    <div class="rechead"><h2>${esc(c.Case_Ref)}</h2><span class="pill ${pill}">${esc(c.Case_Status)}</span>
+      <label class="statuslbl">Set status <select id="statusSel" class="fsel">${statusOpts}</select></label></div>
     <div class="recmeta"><span>${esc(c.Case_Type)}</span><span class="dot"></span><span>${esc(c.L1_Country)}</span>
       <span class="dot"></span><span>${esc(c.Assigned_HCG)} mission</span>
       ${c.Resolution_Days?`<span class="dot"></span><span>Resolved in <b class="mono">${c.Resolution_Days}</b> days</span>`:''}</div>
@@ -339,6 +352,7 @@ async function openCase(ref){
         </div></div>
     </div>`;
   $('#backbtn').onclick=()=>{setView('cases');};
+  $('#statusSel').onchange=e=>setStatus(ref, e.target.value);
   document.querySelectorAll('#steps li[data-idx]').forEach(li=>li.onclick=()=>toggleStep(li, ref));
   $('#addnote').onclick=()=>addNote(ref);
   renderNotes(d.notes);
@@ -362,6 +376,10 @@ function toggleStep(li, ref){
   li.querySelector('.box').textContent=done?'✓':'';
   fetch('/api/step',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({ref, step_idx:+li.dataset.idx, done})}).catch(()=>{});
+}
+function setStatus(ref, status){
+  fetch('/api/status',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({ref, status})}).then(()=>openCase(ref)).catch(()=>{});
 }
 
 /* ask */
