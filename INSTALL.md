@@ -108,6 +108,21 @@ correct procedure?" answers.
 > **No CCMS integration is required for the MVP.** The platform derives everything from the email
 > PDFs. Write-back into CCMS is a later phase.
 
+### Shortcut: synthetic data for a fresh workspace
+
+Want to stand the demo up in **another workspace without any real data**? Run
+**`synthetic_data.py`** — it builds the backing tables (a realistic, *uneven* case table
+plus the SOP and operational tables) directly in SQL, no PDFs / parsing / LLM needed:
+
+```bash
+python synthetic_data.py --catalog <catalog> --schema <schema> \
+    --warehouse <warehouse-id> --profile <profile> --cases 400
+```
+
+Then point the app at that catalog/schema (`CCMS_CATALOG` / `CCMS_SCHEMA`) and run the
+install.py serving steps (Genie space, Vector Search, app deploy). The **default install
+path uses real data** — this script is only the "just give me demo data" shortcut.
+
 ## Step 4 — Run All
 
 **Run All**, top to bottom. First run takes several minutes — the Vector Search endpoint and

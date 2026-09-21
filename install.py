@@ -31,7 +31,7 @@ dbutils.widgets.dropdown("ingest_mode", "pdf", ["pdf", "parsed_table", "case_tab
 dbutils.widgets.text("source_table", "", "Existing table (for parsed_table / case_table modes)")
 dbutils.widgets.text("source_case_ref_col", "case_ref", "parsed_table: case-ref column")
 dbutils.widgets.text("source_text_col", "parsed_text", "parsed_table: email-text column")
-dbutils.widgets.dropdown("data_mode", "synthetic", ["synthetic", "byo"], "pdf mode: synthetic or BYO")
+dbutils.widgets.dropdown("data_mode", "byo", ["byo", "synthetic"], "pdf mode: BYO (real) or synthetic")
 dbutils.widgets.text("source_pdf_path", "", "BYO: existing PDF folder (blank = use raw_emails volume)")
 dbutils.widgets.text("llm_endpoint", "databricks-claude-sonnet-4-5", "LLM endpoint")
 dbutils.widgets.text("embedding_endpoint", "databricks-gte-large-en", "Embedding endpoint")

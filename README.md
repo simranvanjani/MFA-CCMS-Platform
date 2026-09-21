@@ -59,6 +59,11 @@ the app. Import this repo as a **Git folder**, open `install.py`, set the widget
   downstream layer (tags, analytics, search, Genie, dashboard, app) is derived automatically.
 - Set `warehouse_id` to enable Genie + dashboard + app; requires **serverless or DBR 17.3+**.
 
+**Synthetic-data shortcut:** to stand the demo up in another workspace with no real data,
+run `synthetic_data.py --catalog <c> --schema <s> --warehouse <id>` — it builds the case,
+SOP, and operational tables (uneven, realistic distributions) directly in SQL, then point
+the app at that catalog/schema.
+
 ## Files
 
 - `pipeline/` — `config.py`, `dbsql.py`, `00_schema.py` … `07_dashboard.py`, `run_all.py`
