@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.3/chart.umd.min.js"></script>
 <style>
 :root{
   --ground:#eef1f5; --surface:#ffffff; --surface-2:#f6f8fb;
@@ -139,15 +140,20 @@ tbody tr:hover{background:var(--surface-2)}
 .note .meta .ts{color:var(--faint);font-family:var(--mono);font-size:11px;margin-left:6px}
 .note .txt{font-size:13px}
 .empty{color:var(--faint);font-size:12.5px;padding:14px 0;text-align:center}
-.kpirow{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:18px}
-.kpi{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 18px;box-shadow:var(--shadow)}
+.kpirow{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:18px}
+.kpi{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px 18px;box-shadow:var(--shadow);position:relative;overflow:hidden}
+.kpi::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--kpi-accent,var(--brand))}
 .kpi .n{font-size:30px;font-weight:600;font-family:var(--mono);letter-spacing:-.02em}
 .kpi .k{font-size:12px;color:var(--muted);margin-top:2px}
-.charts{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-.bar{display:flex;align-items:center;gap:12px;margin:11px 0;font-size:12.5px}
-.bar .lab{width:150px;color:var(--ink);flex:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.bar .track{flex:1;height:14px;border:1px solid var(--border);border-radius:100px}
-.bar .val{width:52px;text-align:right;font-family:var(--mono);color:var(--ink);font-weight:600}
+.kpi .delta{font-size:11.5px;font-weight:600;margin-top:8px;display:inline-flex;align-items:center;gap:4px}
+.kpi .delta.up{color:var(--ok)}.kpi .delta.down{color:var(--crit)}.kpi .delta.flat{color:var(--muted)}
+.charts{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.chartcard{background:var(--surface);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);padding:16px 18px}
+.chartcard.wide{grid-column:1 / -1}
+.chartcard h3{font-size:14px;font-weight:600;margin-bottom:2px}
+.chartcard .sub{font-size:12px;color:var(--muted);margin-bottom:12px}
+.chartcard .canvas-wrap{position:relative;height:280px}
+@media (max-width:900px){.charts{grid-template-columns:1fr}.kpirow{grid-template-columns:repeat(2,1fr)}}
 #v-ask.show{display:flex;flex-direction:column;padding:0;max-width:none;height:calc(100dvh - 58px)}
 .askwrap{display:grid;grid-template-columns:250px 1fr;flex:1;min-height:0}
 .convrail{border-right:1px solid var(--border);padding:16px 12px;display:flex;flex-direction:column;gap:4px;overflow-y:auto}
@@ -464,25 +470,57 @@ $('#asksend').onclick=ask;
 $('#askin').addEventListener('keydown',e=>{if(e.key==='Enter')ask();});
 $('#newchat').onclick=newChat;
 
-/* dashboard */
+/* dashboard — illustrative figures (demo) */
 let dashLoaded=false;
-async function loadDash(){
+const PALETTE=['#3987e5','#d95926','#199e70','#c98500','#d55181','#9085e9','#008300','#e66767'];
+const css=v=>getComputedStyle(document.body).getPropertyValue(v).trim();
+function loadDash(){
   if(dashLoaded)return; dashLoaded=true;
-  const d=await (await fetch('/api/dashboard')).json();
-  const bars=(data,unit='')=>{const mx=Math.max(1,...data.map(x=>+x.v));return data.map(x=>{const p=Math.round((+x.v)/mx*100);return `<div class="bar"><span class="lab">${esc(x.k)}</span><span class="track" style="background:linear-gradient(90deg,var(--brand) 0 ${p}%,var(--surface-2) ${p}% 100%)"></span><span class="val">${x.v}${unit}</span></div>`;}).join('');};
-  $('#dashbody').innerHTML=`
-    <div class="kpirow">
-      <div class="kpi"><div class="n">${d.kpi.total}</div><div class="k">Total cases</div></div>
-      <div class="kpi"><div class="n">${d.kpi.closed}</div><div class="k">Closed cases</div></div>
-      <div class="kpi"><div class="n">${d.kpi.avg_days}</div><div class="k">Avg resolution (days)</div></div>
-    </div>
+  const box=$('#dashbody');
+  if(typeof Chart==='undefined'){box.innerHTML='<div class="loading">Charts library unavailable in this environment.</div>';return;}
+  const ink=css('--ink')||'#e8edf4', muted=css('--muted')||'#9aa7b8', surface=css('--surface')||'#161e2b';
+  Chart.defaults.color=muted; Chart.defaults.borderColor='rgba(148,163,184,.14)';
+  Chart.defaults.font.family="'IBM Plex Sans',system-ui,sans-serif"; Chart.defaults.font.size=12;
+  Chart.defaults.plugins.legend.labels.usePointStyle=true; Chart.defaults.plugins.legend.labels.boxWidth=8;
+
+  const months=['Oct','Nov','Dec','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep'];
+  const D={
+    kpi:[
+      {n:'1,284',k:'Total cases (12 mo)',d:'+6.2% vs prev',cls:'up',accent:'#3987e5'},
+      {n:'342',k:'Open cases',d:'+18 this week',cls:'up',accent:'#c98500'},
+      {n:'9.4d',k:'Avg resolution',d:'−1.2d vs prev',cls:'down',accent:'#199e70'},
+      {n:'7',k:'SLA breaches',d:'−3 vs prev',cls:'down',accent:'#e66767'},
+    ],
+    newv:[86,92,78,120,104,138,96,110,124,142,118,131],
+    resv:[74,88,81,102,110,121,99,105,118,126,120,128],
+    types:{Scam:312,'Lost/Stolen Document':268,'Victim of Crime':201,'Serious Illness/Death':156,'Arrest & Detention':118,Evacuation:89},
+    status:{Open:342,'In Progress':128,'On Hold':47,Closed:767},
+    countries:{Thailand:214,China:187,Malaysia:156,Indonesia:143,'United Kingdom':98,Australia:76,Japan:64,India:58},
+    res:{'Serious Illness/Death':14.2,'Arrest & Detention':12.6,'Victim of Crime':10.9,Evacuation:9.1,'Lost/Stolen Document':6.8,Scam:5.4},
+    flags:{'Scam involvement':210,'Welfare concern':156,'Language barrier':98,'MP/POH escalation':42},
+  };
+  box.innerHTML=`
+    <div class="kpirow">`+D.kpi.map(t=>`<div class="kpi" style="--kpi-accent:${t.accent}"><div class="n">${t.n}</div><div class="k">${t.k}</div><div class="delta ${t.cls}">${t.cls==='down'?'▼':'▲'} ${t.d}</div></div>`).join('')+`</div>
     <div class="charts">
-      <div class="card"><div class="hd">Cases by type</div><div class="bd">${bars(d.by_type)}</div></div>
-      <div class="card"><div class="hd">Cases by country</div><div class="bd">${bars(d.by_country)}</div></div>
-      <div class="card"><div class="hd">Handling volume by mission</div><div class="bd">${bars(d.by_mission)}</div></div>
-      <div class="card"><div class="hd">Avg resolution days by type</div><div class="bd">${bars(d.resolution,'d')}</div></div>
-    </div>
-    ${d.flags.length?`<div class="card" style="margin-top:14px"><div class="hd">Situational flags</div><div class="bd">${bars(d.flags)}</div></div>`:''}`;
+      <div class="chartcard wide"><h3>Case volume over time</h3><div class="sub">New vs resolved, last 12 months</div><div class="canvas-wrap"><canvas id="c_trend"></canvas></div></div>
+      <div class="chartcard"><h3>Cases by type</h3><div class="sub">Share of total caseload</div><div class="canvas-wrap"><canvas id="c_type"></canvas></div></div>
+      <div class="chartcard"><h3>Cases by status</h3><div class="sub">Current pipeline</div><div class="canvas-wrap"><canvas id="c_status"></canvas></div></div>
+      <div class="chartcard"><h3>Top countries by volume</h3><div class="sub">Where cases concentrate</div><div class="canvas-wrap"><canvas id="c_country"></canvas></div></div>
+      <div class="chartcard"><h3>Avg resolution days by type</h3><div class="sub">Time to close</div><div class="canvas-wrap"><canvas id="c_res"></canvas></div></div>
+      <div class="chartcard wide"><h3>Situational flags</h3><div class="sub">Volume by flag</div><div class="canvas-wrap" style="height:220px"><canvas id="c_flags"></canvas></div></div>
+    </div>`;
+  const grid={grid:{color:'rgba(148,163,184,.12)'}}, nogrid={grid:{display:false}};
+  const el=id=>document.getElementById(id).getContext('2d');
+  new Chart(el('c_trend'),{type:'line',data:{labels:months,datasets:[
+    {label:'New',data:D.newv,borderColor:PALETTE[0],backgroundColor:'rgba(57,135,229,.15)',fill:true,tension:.35,pointRadius:0,borderWidth:2},
+    {label:'Resolved',data:D.resv,borderColor:PALETTE[2],backgroundColor:'rgba(25,158,112,.12)',fill:true,tension:.35,pointRadius:0,borderWidth:2}]},
+    options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{position:'top',align:'end'}},scales:{x:nogrid,y:{...grid,beginAtZero:true}}}});
+  const donut=(id,obj)=>new Chart(el(id),{type:'doughnut',data:{labels:Object.keys(obj),datasets:[{data:Object.values(obj),backgroundColor:PALETTE,borderColor:surface,borderWidth:2}]},options:{responsive:true,maintainAspectRatio:false,cutout:'62%',plugins:{legend:{position:'right'}}}});
+  donut('c_type',D.types); donut('c_status',D.status);
+  const hbar=(id,obj,color,unit='')=>new Chart(el(id),{type:'bar',data:{labels:Object.keys(obj),datasets:[{data:Object.values(obj),backgroundColor:color,borderRadius:5,barThickness:16}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>` ${c.raw}${unit}`}}},scales:{x:{...grid,beginAtZero:true},y:nogrid}}});
+  hbar('c_country',D.countries,PALETTE[0]);
+  hbar('c_res',D.res,PALETTE[3],'d');
+  new Chart(el('c_flags'),{type:'bar',data:{labels:Object.keys(D.flags),datasets:[{data:Object.values(D.flags),backgroundColor:[PALETTE[7],PALETTE[3],PALETTE[5],PALETTE[0]],borderRadius:5,barThickness:34}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:nogrid,y:{...grid,beginAtZero:true}}}});
 }
 
 fetch('/api/me').then(r=>r.json()).then(d=>{window.__me=d.email;$('#meid').textContent=d.email;$('#meav').textContent=inits(d.email);}).catch(()=>{window.__me='officer';});
