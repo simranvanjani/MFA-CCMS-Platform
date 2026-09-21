@@ -46,6 +46,12 @@ def index():
     return FileResponse(os.path.join(HERE, "index.html"))
 
 
+@app.get("/chart.umd.min.js")
+def chartjs():
+    return FileResponse(os.path.join(HERE, "chart.umd.min.js"),
+                        media_type="application/javascript")
+
+
 @app.get("/api/me")
 def me(request: Request):
     return {"email": user_email(request)}
