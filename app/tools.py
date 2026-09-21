@@ -20,19 +20,35 @@ IDX_SOP = os.getenv("IDX_SOP", f"{FQ}.sop_index")
 APP_W = WorkspaceClient()  # app service principal (or CLI profile locally)
 
 
-def _query(sql, w=None):
+def _run_one(client, sql):
     from databricks.sdk.service.sql import StatementState
-    client = w or APP_W
     r = client.statement_execution.execute_statement(
         warehouse_id=WAREHOUSE, statement=sql, wait_timeout="30s")
     while r.status.state in (StatementState.PENDING, StatementState.RUNNING):
         import time; time.sleep(1)
         r = client.statement_execution.get_statement(r.statement_id)
     if r.status.state != StatementState.SUCCEEDED:
-        return [], []
+        msg = r.status.error.message if r.status.error else str(r.status.state)
+        raise RuntimeError(f"statement {r.status.state}: {msg}")
     cols = [c.name for c in r.manifest.schema.columns] if r.manifest else []
     rows = r.result.data_array if (r.result and r.result.data_array) else []
     return cols, rows
+
+
+def _query(sql, w=None):
+    """Run SQL as the user (OBO) when given; fall back to the app SP on any error
+    so the app stays usable even if the user-token path fails."""
+    clients = [c for c in (w, APP_W) if c is not None]
+    last = None
+    for client in clients:
+        try:
+            return _run_one(client, sql)
+        except Exception as e:
+            last = e
+            continue
+    if last:
+        raise last
+    return [], []
 
 
 def genie_query(question: str, w=None) -> str:

@@ -22,11 +22,18 @@ CFG = Config()
 
 
 def user_client(request: Request):
-    """A WorkspaceClient scoped to the logged-in user (OBO), or None locally."""
+    """A WorkspaceClient scoped to the logged-in user (OBO), or None locally.
+
+    Forces PAT auth so the ambient service-principal env credentials in the app
+    runtime can't collide with the forwarded user token.
+    """
     token = request.headers.get("x-forwarded-access-token")
     if not token:
         return None
-    return WorkspaceClient(host=CFG.host, token=token)
+    try:
+        return WorkspaceClient(config=Config(host=CFG.host, token=token, auth_type="pat"))
+    except Exception:
+        return None
 
 
 def user_email(request: Request):
