@@ -301,7 +301,7 @@ async function openCase(ref){
   const flagChips=flags.length?flags.map(f=>`<span class="chip ${FLAGCLS[f]||''}">${esc(f)}</span>`).join('')
     :'<span class="chip" style="color:var(--faint)">No situational flags</span>';
   const agencyChips=(c.L1_Agencies||[]).map(a=>`<span class="chip agency">${esc(a)}</span>`).join('');
-  const stepsHtml=d.steps.length?d.steps.map(s=>`<li><span class="box"></span><span>${esc(s)}</span></li>`).join('')
+  const stepsHtml=d.steps.length?d.steps.map(s=>`<li class="${s.done?'done':''}" data-idx="${s.idx}"><span class="box">${s.done?'✓':''}</span><span>${esc(s.text)}</span></li>`).join('')
     :'<li><span>No SOP found for this case type.</span></li>';
   const l2=[['Summary & pathway','L2_Summary_Pathway'],['Assistance requested vs provided','L2_Assistance_Req_vs_Provided'],
     ['Complications & delays','L2_Complications_Delays'],['External resources engaged','L2_External_Resources'],
@@ -339,7 +339,7 @@ async function openCase(ref){
         </div></div>
     </div>`;
   $('#backbtn').onclick=()=>{setView('cases');};
-  document.querySelectorAll('#steps li').forEach(li=>li.onclick=()=>li.classList.toggle('done'));
+  document.querySelectorAll('#steps li[data-idx]').forEach(li=>li.onclick=()=>toggleStep(li, ref));
   $('#addnote').onclick=()=>addNote(ref);
   renderNotes(d.notes);
 }
@@ -355,6 +355,13 @@ async function addNote(ref){
   const d=await (await fetch('/api/note',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({ref,note:t.value.trim()})})).json();
   t.value=''; b.disabled=false; renderNotes(d.notes||[]);
+}
+function toggleStep(li, ref){
+  const done=!li.classList.contains('done');
+  li.classList.toggle('done', done);
+  li.querySelector('.box').textContent=done?'✓':'';
+  fetch('/api/step',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({ref, step_idx:+li.dataset.idx, done})}).catch(()=>{});
 }
 
 /* ask */

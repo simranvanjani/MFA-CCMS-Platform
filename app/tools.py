@@ -172,6 +172,29 @@ def recommended_steps_list(case_type: str, w=None):
             for ln in text.splitlines() if re.match(r"^\s*\d+\.\s+", ln)]
 
 
+def step_status(case_ref: str, w=None):
+    """Return the set of completed step indices for a case."""
+    _, rows = _query(
+        f"SELECT step_idx FROM {FQ}.case_steps WHERE Case_Ref = '{_esc(case_ref)}'", w)
+    return {int(r[0]) for r in rows}
+
+
+def set_step(case_ref: str, step_idx: int, done: bool, author: str, w=None):
+    """Mark a SOP step done/undone for a case (a present row = done)."""
+    cr, i = _esc(case_ref), int(step_idx)
+    _query(f"DELETE FROM {FQ}.case_steps WHERE Case_Ref = '{cr}' AND step_idx = {i}", w)
+    if done:
+        au = _esc(author or "officer")
+        _query(f"INSERT INTO {FQ}.case_steps VALUES ('{cr}', {i}, '{au}', current_timestamp())", w)
+
+
+def steps_with_status(case_type: str, case_ref: str, w=None):
+    """SOP steps annotated with per-case completion."""
+    done = step_status(case_ref, w)
+    return [{"idx": i, "text": t, "done": i in done}
+            for i, t in enumerate(recommended_steps_list(case_type, w))]
+
+
 def dashboard_data(w=None):
     """KPIs + chart series for the dashboard view."""
     G = f"{FQ}.gold_case_intelligence"

@@ -83,8 +83,20 @@ def case(request: Request, ref: str):
         return JSONResponse({"error": "not found"}, status_code=404)
     c["L1_Agencies"] = _arr(c.get("L1_Agencies"))
     c["L1_Situational_Flags"] = _arr(c.get("L1_Situational_Flags"))
-    return {"case": c, "steps": tools.recommended_steps_list(c.get("Case_Type"), w),
+    return {"case": c, "steps": tools.steps_with_status(c.get("Case_Type"), ref, w),
             "notes": tools.get_notes(ref, w)}
+
+
+class StepIn(BaseModel):
+    ref: str
+    step_idx: int
+    done: bool
+
+
+@app.post("/api/step")
+def step(s: StepIn, request: Request):
+    tools.set_step(s.ref, s.step_idx, s.done, user_email(request), user_client(request))
+    return {"ok": True}
 
 
 class NoteIn(BaseModel):
