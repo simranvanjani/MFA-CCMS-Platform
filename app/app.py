@@ -44,11 +44,19 @@ def me(request: Request):
     return {"email": user_email(request)}
 
 
+@app.get("/api/filters")
+def filters(request: Request):
+    return tools.filter_options(user_client(request))
+
+
 @app.get("/api/cases")
-def cases(request: Request, page: int = 0):
+def cases(request: Request, page: int = 0, q: str = "", case_type: str = "",
+          country: str = "", status: str = "", flag: str = ""):
     w = user_client(request)
-    cols, rows = tools.list_cases_page(page, PAGE_SIZE, w)
-    return {"total": tools.count_cases(w), "page": page, "page_size": PAGE_SIZE,
+    f = {"q": q, "case_type": case_type, "country": country, "status": status, "flag": flag}
+    f = {k: v for k, v in f.items() if v}
+    cols, rows = tools.list_cases_page(page, PAGE_SIZE, w, f)
+    return {"total": tools.count_cases(w, f), "page": page, "page_size": PAGE_SIZE,
             "rows": [dict(zip(cols, r)) for r in rows]}
 
 

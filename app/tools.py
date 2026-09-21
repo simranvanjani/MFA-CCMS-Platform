@@ -85,19 +85,57 @@ def get_case(case_ref: str, w=None) -> dict:
     return dict(zip(cols, rows[0]))
 
 
-def count_cases(w=None) -> int:
-    _, rows = _query(f"SELECT count(*) FROM {FQ}.gold_case_intelligence", w)
+def _esc(v):
+    return str(v).replace("'", "''")
+
+
+def _where(filters):
+    """Build a WHERE clause from column filters + a free-text query."""
+    if not filters:
+        return ""
+    c = []
+    if filters.get("case_type"):
+        c.append(f"Case_Type = '{_esc(filters['case_type'])}'")
+    if filters.get("country"):
+        c.append(f"L1_Country = '{_esc(filters['country'])}'")
+    if filters.get("status"):
+        c.append(f"Case_Status = '{_esc(filters['status'])}'")
+    if filters.get("flag"):
+        c.append(f"array_contains(L1_Situational_Flags, '{_esc(filters['flag'])}')")
+    if filters.get("q"):
+        q = _esc(filters["q"])
+        cols = ["Case_Ref", "Case_Type", "L1_Country", "Case_Location", "Assigned_HCG",
+                "Case_Description", "Case_Title"]
+        c.append("(" + " OR ".join(f"{col} ILIKE '%{q}%'" for col in cols) + ")")
+    return (" WHERE " + " AND ".join(c)) if c else ""
+
+
+def count_cases(w=None, filters=None) -> int:
+    _, rows = _query(f"SELECT count(*) FROM {FQ}.gold_case_intelligence{_where(filters)}", w)
     return int(rows[0][0]) if rows else 0
 
 
-def list_cases_page(page: int, page_size: int = 20, w=None):
-    """Return (columns, rows) for one page, newest first."""
+def list_cases_page(page: int, page_size: int = 20, w=None, filters=None):
+    """Return (columns, rows) for one page, newest first, honoring filters."""
     offset = page * page_size
     return _query(
         "SELECT Case_Ref, Case_Type, L1_Country AS Country, Assigned_HCG AS Mission, "
         "Case_Status AS Status, Created_On "
-        f"FROM {FQ}.gold_case_intelligence "
+        f"FROM {FQ}.gold_case_intelligence{_where(filters)} "
         f"ORDER BY to_date(Created_On) DESC, Case_Ref DESC LIMIT {page_size} OFFSET {offset}", w)
+
+
+def filter_options(w=None):
+    """Distinct values for the list-view filter dropdowns."""
+    def vals(sql):
+        return [r[0] for r in _query(sql, w)[1] if r[0]]
+    return {
+        "case_type": vals(f"SELECT DISTINCT Case_Type FROM {FQ}.gold_case_intelligence ORDER BY 1"),
+        "country": vals(f"SELECT DISTINCT L1_Country FROM {FQ}.gold_case_intelligence WHERE L1_Country IS NOT NULL ORDER BY 1"),
+        "status": vals(f"SELECT DISTINCT Case_Status FROM {FQ}.gold_case_intelligence ORDER BY 1"),
+        "flag": vals(f"SELECT DISTINCT flag FROM {FQ}.gold_case_intelligence "
+                     f"LATERAL VIEW explode(L1_Situational_Flags) t AS flag ORDER BY 1"),
+    }
 
 
 def recommended_steps(case_type: str, w=None) -> str:

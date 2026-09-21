@@ -63,6 +63,11 @@ a{color:var(--brand);text-decoration:none}
 .count{font-size:13px;color:var(--muted)}.count b{color:var(--ink)}
 .search{flex:1;min-width:180px;display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:8px 12px;color:var(--faint)}
 .search input{border:none;background:none;outline:none;color:var(--ink);font-family:inherit;font-size:13.5px;width:100%}
+.filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:14px}
+.fsel{appearance:none;-webkit-appearance:none;background:var(--surface) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6'><path d='M0 0l5 6 5-6z' fill='%238a96a6'/></svg>") no-repeat right 10px center;border:1px solid var(--border);border-radius:9px;padding:8px 28px 8px 12px;font-family:inherit;font-size:12.5px;color:var(--ink);cursor:pointer}
+.fsel:focus{outline:none;border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-soft)}
+.fclear{background:none;border:1px solid var(--border);border-radius:9px;padding:8px 12px;font-size:12.5px;color:var(--muted)}
+.fclear:hover{color:var(--brand);border-color:var(--brand)}
 .seg{display:flex;border:1px solid var(--border);border-radius:9px;overflow:hidden}
 .seg button{border:none;background:var(--surface);padding:8px 12px;font-size:12.5px;color:var(--muted);border-left:1px solid var(--border)}
 .seg button:first-child{border-left:none}
@@ -182,8 +187,15 @@ tbody tr:hover{background:var(--surface-2)}
 
     <div class="content view show" id="v-list">
       <div class="toolbar">
-        <div class="search">🔎 <input id="q" placeholder="Filter this page by ref, type, or country…"></div>
-        <span class="count"><b id="tot">—</b> cases · newest first</span>
+        <div class="search">🔎 <input id="q" placeholder="Search by reference no., name, type, country, description…"></div>
+      </div>
+      <div class="filters">
+        <select id="f_country" class="fsel"><option value="">All countries</option></select>
+        <select id="f_type" class="fsel"><option value="">All case types</option></select>
+        <select id="f_flag" class="fsel"><option value="">All flags</option></select>
+        <select id="f_status" class="fsel"><option value="">Any status</option></select>
+        <button id="f_clear" class="fclear">Clear</button>
+        <span class="count" style="margin-left:auto"><b id="tot">—</b> cases · newest first</span>
       </div>
       <div class="tablecard">
         <table><thead><tr><th>Case</th><th>Type</th><th>Location</th><th>Status</th><th>Created</th><th>Res.</th><th></th></tr></thead>
@@ -227,14 +239,35 @@ function setView(v){
 document.querySelectorAll('.nav').forEach(n=>n.onclick=()=>setView(n.dataset.view));
 
 /* cases list */
+function _filters(){
+  return {q:$('#q').value.trim(), country:$('#f_country').value, case_type:$('#f_type').value,
+          flag:$('#f_flag').value, status:$('#f_status').value};
+}
+async function loadFilters(){
+  try{
+    const o=await (await fetch('/api/filters')).json();
+    const fill=(id,arr)=>{const s=$(id);(arr||[]).forEach(v=>{const op=document.createElement('option');op.value=v;op.textContent=v;s.appendChild(op);});};
+    fill('#f_country',o.country); fill('#f_type',o.case_type); fill('#f_flag',o.flag); fill('#f_status',o.status);
+  }catch(e){/* dropdowns stay as "All"; search still works */}
+}
 async function loadCases(p){
   $('#rows').innerHTML='<tr><td colspan="7" class="loading">Loading…</td></tr>';
-  const d=await (await fetch('/api/cases?page='+p)).json();
+  const params=new URLSearchParams(Object.assign({page:p}, _filters()));
+  let d;
+  try{
+    const res=await fetch('/api/cases?'+params.toString());
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    d=await res.json();
+  }catch(e){
+    $('#rows').innerHTML=`<tr><td colspan="7" class="loading">Couldn't load cases (${esc(e.message)}). <a href="#" onclick="loadCases(${p});return false;">Retry</a></td></tr>`;
+    return;
+  }
   page=d.page; pages=Math.max(1,Math.ceil(d.total/d.page_size));
   $('#tot').textContent=d.total;
   $('#pginfo').textContent=`Page ${page+1} of ${pages}`;
   $('#first').disabled=$('#prev').disabled=page===0;
   $('#next').disabled=page>=pages-1;
+  if(!d.rows.length){$('#rows').innerHTML='<tr><td colspan="7" class="loading">No cases match these filters.</td></tr>';return;}
   $('#rows').innerHTML=d.rows.map(r=>{
     const pill=r.Status==='Closed'?'closed':'pending';
     return `<tr>
@@ -247,11 +280,11 @@ async function loadCases(p){
       <td class="right"><button class="viewbtn" data-ref="${esc(r.Case_Ref)}">View</button></td></tr>`;
   }).join('');
   document.querySelectorAll('.viewbtn').forEach(b=>b.onclick=()=>openCase(b.dataset.ref));
-  const q=$('#q').value.toLowerCase();
-  if(q)filterRows(q);
 }
-function filterRows(q){document.querySelectorAll('#rows tr').forEach(tr=>{tr.style.display=tr.textContent.toLowerCase().includes(q)?'':'none';});}
-$('#q').oninput=e=>filterRows(e.target.value.toLowerCase());
+let _qt;
+$('#q').oninput=()=>{clearTimeout(_qt);_qt=setTimeout(()=>loadCases(0),300);};
+['#f_country','#f_type','#f_flag','#f_status'].forEach(id=>$(id).onchange=()=>loadCases(0));
+$('#f_clear').onclick=()=>{$('#q').value='';['#f_country','#f_type','#f_flag','#f_status'].forEach(id=>$(id).value='');loadCases(0);};
 $('#first').onclick=()=>loadCases(0);
 $('#prev').onclick=()=>loadCases(page-1);
 $('#next').onclick=()=>loadCases(page+1);
@@ -363,6 +396,7 @@ async function loadDash(){
 }
 
 fetch('/api/me').then(r=>r.json()).then(d=>{window.__me=d.email;$('#meid').textContent=d.email;$('#meav').textContent=inits(d.email);}).catch(()=>{window.__me='officer';});
+loadFilters();
 loadCases(0);
 </script>
 </body>
