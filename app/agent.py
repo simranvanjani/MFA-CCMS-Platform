@@ -42,8 +42,9 @@ def route(question: str) -> dict:
         return {"route": "structured"}
 
 
-def answer(question: str, w=None) -> tuple[str, str]:
-    """Return (route, answer_markdown). `w` is the user (OBO) client for SQL + Genie."""
+def answer(question: str, w=None, conv_id=None) -> tuple[str, str]:
+    """Return (route, answer_markdown). `w` is the user (OBO) client for SQL + Genie;
+    `conv_id` keeps a single Genie conversation per chat thread for follow-up context."""
     r = route(question)
     route_name = r.get("route", "structured")
 
@@ -60,7 +61,7 @@ def answer(question: str, w=None) -> tuple[str, str]:
         source = f"Case record {ref}"
     else:
         route_name = "structured"
-        evidence = tools.genie_query(question, w)
+        evidence = tools.genie_query(question, w, conv_id)
         source = "Genie over the structured case table"
 
     compose = [

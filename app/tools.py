@@ -51,17 +51,48 @@ def _query(sql, w=None):
     return [], []
 
 
-def genie_query(question: str, w=None) -> str:
-    """Answer a structured/analytical question via the Genie space (as the user when w given)."""
+def _genie_conv_get(conv_id, w):
+    if not conv_id:
+        return None
+    _, rows = _query(
+        f"SELECT genie_conv_id FROM {FQ}.chat_genie WHERE conv_id = '{_esc(conv_id)}' LIMIT 1", w)
+    return rows[0][0] if rows else None
+
+
+def _genie_conv_set(conv_id, genie_conv_id, w):
+    cid = _esc(conv_id)
+    _query(f"DELETE FROM {FQ}.chat_genie WHERE conv_id = '{cid}'", w)
+    _query(f"INSERT INTO {FQ}.chat_genie VALUES ('{cid}', '{_esc(genie_conv_id)}', current_timestamp())", w)
+
+
+def _genie_text(msg):
+    parts = []
+    for a in (msg.attachments or []):
+        if a.text and a.text.content:
+            parts.append(a.text.content)
+        if a.query and a.query.query:
+            parts.append(f"\n_SQL:_ `{a.query.query}`")
+    return "\n".join(parts) if parts else "Genie returned no answer."
+
+
+def genie_query(question: str, w=None, conv_id=None) -> str:
+    """Answer via Genie. Continues the same Genie conversation per chat thread so
+    follow-ups ('in the last year') keep the prior context."""
+    g = w or APP_W
     try:
-        msg = (w or APP_W).genie.start_conversation_and_wait(GENIE_SPACE, question)
-        parts = []
-        for a in (msg.attachments or []):
-            if a.text and a.text.content:
-                parts.append(a.text.content)
-            if a.query and a.query.query:
-                parts.append(f"\n_SQL:_ `{a.query.query}`")
-        return "\n".join(parts) if parts else "Genie returned no answer."
+        gcid = _genie_conv_get(conv_id, w)
+        if gcid:
+            try:
+                return _genie_text(g.genie.create_message_and_wait(GENIE_SPACE, gcid, question))
+            except Exception:
+                gcid = None  # stale conversation — start fresh below
+        msg = g.genie.start_conversation_and_wait(GENIE_SPACE, question)
+        if conv_id and getattr(msg, "conversation_id", None):
+            try:
+                _genie_conv_set(conv_id, msg.conversation_id, w)
+            except Exception:
+                pass
+        return _genie_text(msg)
     except Exception as e:
         return f"Genie error: {e}"
 
@@ -119,10 +150,17 @@ def _where(filters):
     if filters.get("flag"):
         c.append(f"array_contains(L1_Situational_Flags, '{_esc(filters['flag'])}')")
     if filters.get("q"):
-        q = _esc(filters["q"])
         cols = ["Case_Ref", "Case_Type", "L1_Country", "Case_Location", "Assigned_HCG",
-                "Case_Description", "Case_Title"]
-        c.append("(" + " OR ".join(f"{col} ILIKE '%{q}%'" for col in cols) + ")")
+                "Case_Description", "Case_Title", "Case_Subject", "Citizenship"]
+        stop = {"case", "cases", "the", "a", "an", "in", "of", "for", "from", "and", "to",
+                "with", "on", "last", "this", "show", "me", "all", "find"}
+        toks = [t for t in filters["q"].split() if t.lower() not in stop and len(t) >= 2]
+        if not toks:
+            toks = [filters["q"]]
+        # Each meaningful token must appear in at least one searched column (AND of tokens).
+        for t in toks:
+            te = _esc(t)
+            c.append("(" + " OR ".join(f"{col} ILIKE '%{te}%'" for col in cols) + ")")
     return (" WHERE " + " AND ".join(c)) if c else ""
 
 
@@ -229,6 +267,37 @@ def dashboard_data(w=None):
         "flags": q(f"SELECT flag k, count(*) v FROM {G} LATERAL VIEW explode(L1_Situational_Flags) t AS flag "
                    f"GROUP BY flag ORDER BY v DESC"),
     }
+
+
+def add_chat(conv_id: str, user_email: str, role: str, content: str, route=None, w=None):
+    cid, em, rl = _esc(conv_id), _esc(user_email), _esc(role)
+    ct, rt = _esc(content), (f"'{_esc(route)}'" if route else "NULL")
+    _query(f"INSERT INTO {FQ}.chat_messages VALUES "
+           f"('{cid}', '{em}', '{rl}', '{ct}', {rt}, current_timestamp())", w)
+
+
+def chat_list(user_email: str, w=None):
+    """Conversations for a user: id, title (first question), last-updated."""
+    em = _esc(user_email)
+    cols, rows = _query(f"""
+        WITH firsts AS (
+          SELECT conv_id, content,
+                 row_number() OVER (PARTITION BY conv_id ORDER BY created_at) rn
+          FROM {FQ}.chat_messages WHERE user_email = '{em}' AND role = 'user'),
+        agg AS (SELECT conv_id, max(created_at) updated FROM {FQ}.chat_messages
+                WHERE user_email = '{em}' GROUP BY conv_id)
+        SELECT a.conv_id, f.content AS title, cast(a.updated AS STRING) AS updated
+        FROM agg a JOIN firsts f ON a.conv_id = f.conv_id AND f.rn = 1
+        ORDER BY a.updated DESC LIMIT 50""", w)
+    return [dict(zip(cols, r)) for r in rows]
+
+
+def chat_messages_for(conv_id: str, w=None):
+    cid = _esc(conv_id)
+    cols, rows = _query(
+        f"SELECT role, content, route FROM {FQ}.chat_messages "
+        f"WHERE conv_id = '{cid}' ORDER BY created_at", w)
+    return [dict(zip(cols, r)) for r in rows]
 
 
 def get_notes(case_ref: str, w=None):

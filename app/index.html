@@ -58,7 +58,7 @@ a{color:var(--brand);text-decoration:none}
 .topbar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:color-mix(in srgb,var(--ground) 86%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--border);padding:14px 24px;display:flex;align-items:center;gap:14px}
 .topbar h1{font-size:16px}
 .crumb{color:var(--faint);font-size:12.5px}
-.content{padding:22px 24px 40px;max-width:1180px;width:100%}
+.content{padding:22px 32px 48px;width:100%}
 .toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
 .count{font-size:13px;color:var(--muted)}.count b{color:var(--ink)}
 .search{flex:1;min-width:180px;display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:8px 12px;color:var(--faint)}
@@ -146,10 +146,27 @@ tbody tr:hover{background:var(--surface-2)}
 .charts{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 .bar{display:flex;align-items:center;gap:12px;margin:11px 0;font-size:12.5px}
 .bar .lab{width:150px;color:var(--ink);flex:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.bar .track{flex:1;height:12px;background:var(--surface-2);border:1px solid var(--border);border-radius:100px;overflow:hidden}
-.bar .fill{height:100%;min-width:6px;background:linear-gradient(90deg,var(--brand-ink),var(--brand));border-radius:100px}
-.bar .val{width:44px;text-align:right;font-family:var(--mono);color:var(--ink);font-weight:600}
-.chat{max-width:760px}
+.bar .track{flex:1;height:14px;border:1px solid var(--border);border-radius:100px}
+.bar .val{width:52px;text-align:right;font-family:var(--mono);color:var(--ink);font-weight:600}
+#v-ask.show{display:flex;flex-direction:column;padding:0;max-width:none;height:calc(100dvh - 58px)}
+.askwrap{display:grid;grid-template-columns:250px 1fr;flex:1;min-height:0}
+.convrail{border-right:1px solid var(--border);padding:16px 12px;display:flex;flex-direction:column;gap:4px;overflow-y:auto}
+.newchat{background:var(--brand);color:#fff;border:none;border-radius:9px;padding:10px 12px;font-size:13px;font-weight:600;width:100%}
+.newchat:hover{background:var(--brand-ink)}
+.convhdr{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);margin:14px 4px 4px}
+.convs{display:flex;flex-direction:column;gap:2px}
+.convitem{text-align:left;border:none;background:none;color:var(--muted);padding:9px 10px;border-radius:8px;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%;cursor:pointer}
+.convitem:hover{background:var(--surface-2);color:var(--ink)}
+.convitem.active{background:var(--brand-soft);color:var(--brand-ink);font-weight:600}
+.chatmain{display:flex;flex-direction:column;min-width:0;min-height:0}
+.chat{max-width:820px;width:100%;margin:0 auto;flex:1;overflow-y:auto;padding:24px 24px 8px}
+.emptyq{max-width:820px;margin:8px auto 0}
+.emptyq h2{font-size:20px;margin-bottom:6px}
+.emptyq p{color:var(--muted);margin:0 0 16px}
+.suggests{display:flex;flex-direction:column;gap:8px}
+.suggest{text-align:left;border:1px solid var(--border);background:var(--surface);border-radius:10px;padding:12px 14px;font-size:13.5px;color:var(--ink);cursor:pointer}
+.suggest:hover{border-color:var(--brand);background:var(--surface-2)}
+.suggest .k{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--faint);display:block;margin-bottom:2px}
 .msg{display:flex;gap:11px;margin-bottom:18px}
 .msg .av{flex:none;width:30px;height:30px;border-radius:8px;display:grid;place-items:center;font-size:13px;font-weight:600}
 .msg.u .av{background:var(--surface-2);border:1px solid var(--border)}
@@ -157,7 +174,7 @@ tbody tr:hover{background:var(--surface-2)}
 .bubble{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 15px;box-shadow:var(--shadow)}
 .msg.u .bubble{background:var(--surface-2);box-shadow:none}
 .routetag{display:inline-block;font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--brand-ink);background:var(--brand-soft);padding:2px 8px;border-radius:6px;margin-bottom:7px;font-weight:600}
-.askbar{display:flex;gap:9px;max-width:760px;margin-top:6px}
+.askbar{display:flex;gap:9px;max-width:820px;width:100%;margin:0 auto;padding:14px 24px;border-top:1px solid var(--border)}
 .askbar input{flex:1;border:1px solid var(--border);border-radius:10px;padding:11px 14px;font-family:inherit;font-size:13.5px;background:var(--surface);color:var(--ink);outline:none}
 .askbar input:focus{border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-soft)}
 .view{display:none}.view.show{display:block}
@@ -217,10 +234,17 @@ tbody tr:hover{background:var(--surface-2)}
     <div class="content view" id="v-rec"><div id="recbody"></div></div>
 
     <div class="content view" id="v-ask">
-      <div class="chat" id="chat">
-        <div class="msg a"><div class="av">C</div><div class="bubble">Ask across cases (counts, trends), find <b>similar cases</b>, or ask for the correct <b>procedure</b>. Answers are cited.</div></div>
+      <div class="askwrap">
+        <aside class="convrail">
+          <button id="newchat" class="newchat">+ New chat</button>
+          <div class="convhdr">Recent</div>
+          <div id="convs" class="convs"></div>
+        </aside>
+        <div class="chatmain">
+          <div class="chat" id="chat"></div>
+          <div class="askbar"><input id="askin" placeholder="Ask across cases, find similar cases, or ask for a procedure…"><button class="primary" id="asksend">Send</button></div>
+        </div>
       </div>
-      <div class="askbar"><input id="askin" placeholder="e.g. Arrest & detention cases in Thailand where ICA was involved"><button class="primary" id="asksend">Send</button></div>
     </div>
 
     <div class="content view" id="v-dash"><div id="dashbody"><div class="loading">Loading…</div></div></div>
@@ -244,6 +268,7 @@ function setView(v){
   $('#pgttl').textContent=TITLES[v]; $('#pgcrumb').textContent='';
   $('#v-'+(v==='cases'?'list':v)).classList.add('show');
   if(v==='dash')loadDash();
+  if(v==='ask'){loadConvs(); if(!chatEl().querySelector('.msg') && !chatEl().querySelector('.emptyq')) emptyState();}
 }
 document.querySelectorAll('.nav').forEach(n=>n.onclick=()=>setView(n.dataset.view));
 
@@ -382,29 +407,69 @@ function setStatus(ref, status){
     body:JSON.stringify({ref, status})}).then(()=>openCase(ref)).catch(()=>{});
 }
 
-/* ask */
+/* ask — Genie-style conversation history + new chat */
+let currentConv=null;
+const SUGGESTS=[
+  ["structured","How many cases by country?"],
+  ["structured","Arrest & detention cases in Thailand where ICA was involved"],
+  ["similar","Find similar scam cases in China"],
+  ["procedure","What is the correct procedure for a lost passport?"],
+];
+const chatEl=()=>$('#chat');
+const bubbleU=q=>`<div class="msg u"><div class="av">${inits(window.__me)}</div><div class="bubble">${esc(q)}</div></div>`;
+const bubbleA=(route,ans)=>`<div class="msg a"><div class="av">C</div><div class="bubble">${route?`<span class="routetag">${esc(route)}</span>`:''}<div>${md(ans)}</div></div></div>`;
+function emptyState(){
+  chatEl().innerHTML=`<div class="emptyq"><h2>Ask the case corpus</h2>
+    <p>Ask across cases (counts, trends), find <b>similar cases</b>, or ask for the correct <b>procedure</b>. Answers are cited.</p>
+    <div class="suggests">`+SUGGESTS.map(s=>`<button class="suggest" data-q="${esc(s[1])}"><span class="k">${s[0]}</span>${esc(s[1])}</button>`).join('')+`</div></div>`;
+  chatEl().querySelectorAll('.suggest').forEach(b=>b.onclick=()=>{$('#askin').value=b.dataset.q; ask();});
+}
+async function loadConvs(){
+  try{
+    const d=await (await fetch('/api/chats')).json();
+    const c=d.chats||[];
+    $('#convs').innerHTML=c.length?c.map(x=>`<button class="convitem ${x.conv_id===currentConv?'active':''}" data-id="${esc(x.conv_id)}" title="${esc(x.title)}">${esc(x.title)}</button>`).join('')
+      :'<div class="convhdr" style="margin:6px 4px;text-transform:none">No chats yet</div>';
+    $('#convs').querySelectorAll('.convitem').forEach(b=>b.onclick=()=>openConv(b.dataset.id));
+  }catch(e){}
+}
+async function openConv(id){
+  currentConv=id;
+  try{
+    const d=await (await fetch('/api/chat?conv_id='+encodeURIComponent(id))).json();
+    chatEl().innerHTML=(d.messages||[]).map(m=>m.role==='user'?bubbleU(m.content):bubbleA(m.route,m.content)).join('');
+    chatEl().scrollTop=chatEl().scrollHeight;
+  }catch(e){}
+  loadConvs();
+}
+function newChat(){currentConv=null; emptyState(); loadConvs(); $('#askin').focus();}
 async function ask(){
   const inp=$('#askin'), q=inp.value.trim(); if(!q)return;
-  const chat=$('#chat'); inp.value='';
-  chat.insertAdjacentHTML('beforeend',`<div class="msg u"><div class="av">${inits(window.__me)}</div><div class="bubble">${esc(q)}</div></div>`);
+  inp.value='';
+  if(chatEl().querySelector('.emptyq')) chatEl().innerHTML='';
+  chatEl().insertAdjacentHTML('beforeend', bubbleU(q));
   const id='a'+Date.now();
-  chat.insertAdjacentHTML('beforeend',`<div class="msg a"><div class="av">C</div><div class="bubble" id="${id}"><span class="loading" style="padding:0">Thinking…</span></div></div>`);
-  $('#'+id).scrollIntoView({behavior:'smooth',block:'end'});
+  chatEl().insertAdjacentHTML('beforeend',`<div class="msg a"><div class="av">C</div><div class="bubble" id="${id}"><span class="loading" style="padding:0">Thinking…</span></div></div>`);
+  chatEl().scrollTop=chatEl().scrollHeight;
   try{
-    const d=await (await fetch('/api/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:q})})).json();
+    const body={question:q}; if(currentConv)body.conv_id=currentConv;
+    const d=await (await fetch('/api/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})).json();
+    currentConv=d.conv_id;
     $('#'+id).innerHTML=`<span class="routetag">${esc(d.route)}</span><div>${md(d.answer)}</div>`;
+    loadConvs();
   }catch(e){$('#'+id).innerHTML='Error contacting the assistant.';}
-  $('#'+id).scrollIntoView({behavior:'smooth',block:'end'});
+  chatEl().scrollTop=chatEl().scrollHeight;
 }
 $('#asksend').onclick=ask;
 $('#askin').addEventListener('keydown',e=>{if(e.key==='Enter')ask();});
+$('#newchat').onclick=newChat;
 
 /* dashboard */
 let dashLoaded=false;
 async function loadDash(){
   if(dashLoaded)return; dashLoaded=true;
   const d=await (await fetch('/api/dashboard')).json();
-  const bars=(data,unit='')=>{const mx=Math.max(...data.map(x=>+x.v));return data.map(x=>`<div class="bar"><span class="lab">${esc(x.k)}</span><span class="track"><span class="fill" style="width:${(+x.v)/mx*100}%"></span></span><span class="val">${x.v}${unit}</span></div>`).join('');};
+  const bars=(data,unit='')=>{const mx=Math.max(1,...data.map(x=>+x.v));return data.map(x=>{const p=Math.round((+x.v)/mx*100);return `<div class="bar"><span class="lab">${esc(x.k)}</span><span class="track" style="background:linear-gradient(90deg,var(--brand) 0 ${p}%,var(--surface-2) ${p}% 100%)"></span><span class="val">${x.v}${unit}</span></div>`;}).join('');};
   $('#dashbody').innerHTML=`
     <div class="kpirow">
       <div class="kpi"><div class="n">${d.kpi.total}</div><div class="k">Total cases</div></div>

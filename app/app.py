@@ -124,15 +124,38 @@ def add_note(n: NoteIn, request: Request):
 
 class AskIn(BaseModel):
     question: str
+    conv_id: str | None = None
 
 
 @app.post("/api/ask")
 def ask(a: AskIn, request: Request):
+    import uuid
+    w = user_client(request)
+    email = user_email(request)
+    conv = a.conv_id or uuid.uuid4().hex
     try:
-        route, answer = agent.answer(a.question, user_client(request))
+        tools.add_chat(conv, email, "user", a.question, None, w)
+    except Exception:
+        pass
+    try:
+        route, answer = agent.answer(a.question, w, conv)
     except Exception as e:
-        return {"route": "error", "answer": f"Error: {e}"}
-    return {"route": route, "answer": answer}
+        route, answer = "error", f"Error: {e}"
+    try:
+        tools.add_chat(conv, email, "assistant", answer, route, w)
+    except Exception:
+        pass
+    return {"conv_id": conv, "route": route, "answer": answer}
+
+
+@app.get("/api/chats")
+def chats(request: Request):
+    return {"chats": tools.chat_list(user_email(request), user_client(request))}
+
+
+@app.get("/api/chat")
+def chat(request: Request, conv_id: str):
+    return {"messages": tools.chat_messages_for(conv_id, user_client(request))}
 
 
 @app.get("/api/dashboard")
